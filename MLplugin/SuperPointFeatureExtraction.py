@@ -1,34 +1,38 @@
+__version__ = "1.0"
+
 from meshroom.core import desc
 
 class SuperPointFeatureExtraction(desc.CommandLineNode):
-    category = "ML Plugin"
-    documentation = "A Machine Learning-based Feature Extractor based on the SuperPoint model"
+    commandLine = 'python superpoint_featureExtraction.py --input {inputValue} --output {outputValue} --weights {weightsValue}'
 
-    commandLine = 'superpoint_feature_extraction.exe --input {inputImage} --weights {weightsFile} --output {outputFile}'
+    category = 'ML Plugin'
+    documentation = '''
+Deep learning-based feature extraction using SuperPoint.
+'''
 
     inputs = [
         desc.File(
-            name='inputImage',
-            label='Input Image',
-            description='Path to the input image.',
-            value='',
+            name="input",
+            label="SfMData",
+            description="Input SfMData file.",
+            value="",
             uid=[0],
         ),
         desc.File(
-            name='weightsFile',
-            label='SuperPoint Weights File',
-            description='Path to the pre-trained SuperPoint weights.',
-            value='superpoint_weights.pth',
-            uid=[],
+            name="weights",
+            label="SuperPoint Weights",
+            description="Path to SuperPoint weights file (.pth).",
+            value="",
+            uid=[0],
         ),
     ]
 
     outputs = [
         desc.File(
-            name='outputFile',
-            label='Output Feature File',
-            description='File to store extracted features.',
-            value='superpoint_features.txt',
-            uid=[0],
+            name="output",
+            label="Features Folder",
+            description="Output path for the features and descriptors files (*.feat, *.desc).",
+            value=desc.Node.internalFolder,
+            uid=[],
         ),
     ]
