@@ -1,0 +1,96 @@
+__version__ = "1.0"
+
+from meshroom.core import desc
+import os
+from pathlib import Path
+
+class SuperGlueFeatureMatching(desc.CommandLineNode):
+    commandLine = 'aliceVision_superGlueMatching --input {inputValue} --pairs {imagePairsValue} --features {featuresValue} --output {outputValue} --weights {weightsValue} --matchThreshold {matchingThresholdValue} {"--forceCpu" if forceCpu else ""}'
+
+    category = 'ML Plugin'
+    documentation = '''SuperGlue feature matcher for Meshroom.
+    Requires precomputed features from SuperPoint or other feature extractor.'''
+
+    # Define paths relative to node file location
+    WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "data")
+    WEIGHTS_INDOOR = os.path.join(WEIGHTS_DIR, "superglue_indoor.pth")
+    WEIGHTS_OUTDOOR = os.path.join(WEIGHTS_DIR, "superglue_outdoor.pth")
+
+    inputs = [
+        desc.File(
+            name="input",
+            label="SfMData",
+            description="Input SfMData file.",
+            value="",
+            uid=[0],
+        ),
+        desc.File(
+            name="imagePairs",
+            label="Image Pairs",
+            description="Text file with pairs to match (format: 'viewId1 viewId2')",
+            value="",
+            uid=[0],
+        ),
+        desc.ListAttribute(
+            elementDesc=desc.File(
+                name="featuresFolder",
+                label="Feature Folder",
+                description="Folder containing extracted features and descriptors.",
+                value="",
+                uid=[0],
+            ),
+            name="featuresFolders",
+            label="Features Folders",
+            description="One or more folders containing extracted features and descriptors.",
+        ),
+        desc.ChoiceParam(
+            name="weightsChoice",
+            label="Weights Type",
+            description="SuperGlue pretrained weights",
+            values=["indoor", "outdoor"],
+            value="indoor",
+            exclusive=True,
+            uid=[1],
+        ),
+        desc.FloatParam(
+            name="matchingThreshold",
+            label="Match Threshold",
+            description="Minimum confidence threshold for matches (0-1)",
+            value=0.5,
+            range=(0.0, 1.0, 0.01),
+            uid=[1],
+        ),
+        desc.BoolParam(
+            name="forceCpu",
+            label="Force CPU",
+            description="Disable GPU acceleration",
+            value=False,
+            uid=[1],
+        ),
+    ]
+
+    outputs = [
+        desc.File(
+            name="output",
+            label="Matches Folder",
+            description="Output directory for match files",
+            value=desc.Node.internalFolder,
+            uid=[],
+        ),
+    ]
+
+    def __init__(self):
+        # Verify weights exist during initialization
+        os.makedirs(self.WEIGHTS_DIR, exist_ok=True)
+        if not all(os.path.exists(p) for p in [self.WEIGHTS_INDOOR, self.WEIGHTS_OUTDOOR]):
+            raise FileNotFoundError(
+                f"SuperGlue weights not found in {self.WEIGHTS_DIR}\n"
+                "Required files:\n"
+                f"- {os.path.basename(self.WEIGHTS_INDOOR)}\n"
+                f"- {os.path.basename(self.WEIGHTS_OUTDOOR)}"
+            )
+
+    def processChunk(self, chunk):
+        # Set weights path based on selection
+        chunk.weightsValue = self.WEIGHTS_INDOOR if chunk.weightsChoice == "indoor" else self.WEIGHTS_OUTDOOR
+        super().processChunk(chunk)

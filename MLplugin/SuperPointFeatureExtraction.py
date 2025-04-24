@@ -1,14 +1,17 @@
 __version__ = "1.0"
 
 from meshroom.core import desc
+import os
 
 class SuperPointFeatureExtraction(desc.CommandLineNode):
-    commandLine = 'python superpoint_featureExtraction.py --input {inputValue} --output {outputValue} --weights {weightsValue}'
+    commandLine = 'superPoint_featureExtraction --input {inputValue} --output {outputValue} --weights {weightsValue}'
 
     category = 'ML Plugin'
     documentation = '''
 Deep learning-based feature extraction using SuperPoint.
 '''
+
+    WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), "data", "superpoint_v1.pth")
 
     inputs = [
         desc.File(
@@ -22,7 +25,7 @@ Deep learning-based feature extraction using SuperPoint.
             name="weights",
             label="SuperPoint Weights",
             description="Path to SuperPoint weights file (.pth).",
-            value="",
+            value= WEIGHTS_PATH,
             uid=[0],
         ),
     ]
