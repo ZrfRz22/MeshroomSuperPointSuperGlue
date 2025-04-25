@@ -28,18 +28,17 @@ def extract_and_save(model, image_id, image_path, output_dir, device):
 
     img_tensor = torch.from_numpy(img / 255.).float().unsqueeze(0).unsqueeze(0).to(device)
     with torch.no_grad():
-        output = model({'image': img_tensor})  # model outputs a dictionary
+        output = model({'image': img_tensor})
 
-        keypoints = output['keypoints'][0]  # Take the first image batch
-        scores = output['scores'][0]  # Similarly for scores
-        descriptors = output['descriptors'][0]  # Same for descriptors
+        keypoints = output['keypoints'][0]  # [N, 2]
+        scores = output['scores'][0]        # [N]
+        descriptors = output['descriptors'][0]  # [256, N]
 
-        # Convert keypoints from (y, x) to (x, y) for saving
+        # Convert keypoints from (y, x) to (x, y)
         keypoints = torch.flip(keypoints, [1]).cpu().numpy()
-
-        # Since descriptors are already sampled at the keypoints in SuperPoint,
-        # they are ready to be saved without additional interpolation.
-        descriptors = descriptors.cpu().numpy()
+        
+        # Transpose descriptors to [N, 256] format
+        descriptors = descriptors.t().cpu().numpy()
 
     feat_file = os.path.join(output_dir, f"{image_id}.feat")
     desc_file = os.path.join(output_dir, f"{image_id}.desc")
@@ -64,8 +63,7 @@ def superPoint_featureExtraction():
 
     os.makedirs(args.output, exist_ok=True)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = SuperPoint(default_config).to(device)
-    model.load_state_dict(torch.load(args.weights, map_location=device))
+    model = SuperPoint(default_config, args.weights).to(device)
     model.eval()
 
     image_list = parse_sfm_file(args.input)

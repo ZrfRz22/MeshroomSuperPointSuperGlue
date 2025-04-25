@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 class SuperGlueFeatureMatching(desc.CommandLineNode):
-    commandLine = 'aliceVision_superGlueMatching --input {inputValue} --pairs {imagePairsValue} --features {featuresValue} --output {outputValue} --weights {weightsValue} --matchThreshold {matchingThresholdValue} {"--forceCpu" if forceCpu else ""}'
+    commandLine = 'superGlue_featureMatching --input "{inputValue}" --pairs "{imagePairsValue}" --features {featuresValue} --output "{outputValue}" --weights "{weightsValue}" --weightsType {weightsType} --matchThreshold {matchingThresholdValue}{forceCpuFlag}'
 
     category = 'ML Plugin'
     documentation = '''SuperGlue feature matcher for Meshroom.
@@ -42,15 +42,17 @@ class SuperGlueFeatureMatching(desc.CommandLineNode):
             name="featuresFolders",
             label="Features Folders",
             description="One or more folders containing extracted features and descriptors.",
+            group="",
         ),
         desc.ChoiceParam(
             name="weightsChoice",
             label="Weights Type",
             description="SuperGlue pretrained weights",
             values=["indoor", "outdoor"],
-            value="indoor",
+            value="indoor",  # Default to indoor
             exclusive=True,
             uid=[1],
+            group="",
         ),
         desc.FloatParam(
             name="matchingThreshold",
@@ -80,6 +82,7 @@ class SuperGlueFeatureMatching(desc.CommandLineNode):
     ]
 
     def __init__(self):
+        super().__init__()
         # Verify weights exist during initialization
         os.makedirs(self.WEIGHTS_DIR, exist_ok=True)
         if not all(os.path.exists(p) for p in [self.WEIGHTS_INDOOR, self.WEIGHTS_OUTDOOR]):
@@ -91,6 +94,25 @@ class SuperGlueFeatureMatching(desc.CommandLineNode):
             )
 
     def processChunk(self, chunk):
-        # Set weights path based on selection
-        chunk.weightsValue = self.WEIGHTS_INDOOR if chunk.weightsChoice == "indoor" else self.WEIGHTS_OUTDOOR
+        # Prepare features folders string (space-separated, quoted paths)
+        features_folders = ' '.join(f'"{f.value}"' for f in chunk.node.featuresFolders.value)
+        
+        # Get weights selection and path
+        weights_type = chunk.node.weightsChoice.value
+        weights_path = self.WEIGHTS_INDOOR if weights_type == "indoor" else self.WEIGHTS_OUTDOOR
+        
+        # Prepare command line arguments
+        cmd_args = {
+            'inputValue': chunk.node.input.value,
+            'imagePairsValue': chunk.node.imagePairs.value,
+            'featuresValue': features_folders,
+            'outputValue': chunk.node.output.value,
+            'weightsValue': weights_path,
+            'weightsType': weights_type,  # Pass the actual type (indoor/outdoor)
+            'matchingThresholdValue': chunk.node.matchingThreshold.value,
+            'forceCpuFlag': ' --forceCpu' if chunk.node.forceCpu.value else ''
+        }
+        
+        # Execute command
+        self.commandLine = self.commandLine.format(**cmd_args)
         super().processChunk(chunk)

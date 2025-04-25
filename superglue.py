@@ -203,7 +203,10 @@ class SuperGlue(nn.Module):
         'match_threshold': 0.2,
     }
 
-    def __init__(self, config):
+    # MODIFIED CODE START
+    def __init__(self, config, path=None):
+    # MODIFIED CODE END
+
         super().__init__()
         self.config = {**self.default_config, **config}
 
@@ -220,13 +223,13 @@ class SuperGlue(nn.Module):
         bin_score = torch.nn.Parameter(torch.tensor(1.))
         self.register_parameter('bin_score', bin_score)
 
-        assert self.config['weights'] in ['indoor', 'outdoor']
-
-        # Set absolute path manually
-        path = 'C:/Users/zarif/OneDrive/Documents/FYP2/Meshroom-2023.3.0/lib/meshroom/nodes/MLplugin/data/superglue_{}.pth'.format(self.config['weights'])
-
-        self.load_state_dict(torch.load(path))
-        print('Loaded SuperGlue model ("{}" weights)'.format(self.config['weights']))
+        # MODIFIED CODE START
+        if path is not None:
+            self.load_state_dict(torch.load(path, map_location='cpu'))
+            print('Loaded SuperGlue model (\"{}\" weights)'.format(self.config['weights']))
+        else:
+            raise ValueError("SuperGlue model requires a valid weights_path.")
+        # MODIFIED CODE END
 
 
     def forward(self, data):

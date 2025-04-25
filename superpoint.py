@@ -108,7 +108,10 @@ class SuperPoint(nn.Module):
         'remove_borders': 4,
     }
 
-    def __init__(self, config):
+    # MODIFIED CODE START
+    def __init__(self, config, path=None):
+    # MODIFIED CODE END
+
         super().__init__()
         self.config = {**self.default_config, **config}
 
@@ -133,9 +136,12 @@ class SuperPoint(nn.Module):
             c5, self.config['descriptor_dim'],
             kernel_size=1, stride=1, padding=0)
 
-        path = path = Path(r'C:\Users\zarif\OneDrive\Documents\FYP2\Meshroom-2023.3.0\lib\meshroom\nodes\MLplugin\data\superpoint_v1.pth')
-
-        self.load_state_dict(torch.load(str(path)))
+        # MODIFIED CODE START
+        if path is not None:
+            self.load_state_dict(torch.load(str(path), map_location='cpu'))
+        else:
+            raise ValueError("SuperPoint requires a weights_path.")
+        # MODIFIED CODE END
 
         mk = self.config['max_keypoints']
         if mk == 0 or mk < -1:
