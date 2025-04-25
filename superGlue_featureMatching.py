@@ -3,7 +3,8 @@ import numpy as np
 import torch
 import json
 import argparse
-import superglue as SuperGlue
+from superglue import SuperGlue
+from itertools import combinations
 
 def load_meshroom_features(features_dirs, view_id):
     """Load features from Meshroom's binary format, searching multiple directories"""
@@ -31,10 +32,18 @@ def save_meshroom_matches(matches, output_path):
             if j != -1:
                 np.array([i, j], dtype=np.uint32).tofile(f)
 
+
 def read_image_pairs(pairs_path):
-    """Read viewId pairs from text file"""
+    """Read pairwise combinations from lines with multiple IDs"""
+    pairs = []
     with open(pairs_path) as f:
-        return [line.strip().split() for line in f if line.strip()]
+        for line in f:
+            ids = line.strip().split()
+            if len(ids) >= 2:
+                # Make all pairwise combinations
+                pairs.extend(list(combinations(ids, 2)))
+    return pairs
+
 
 def get_image_shapes(sfm_data, view_ids):
     """Get image dimensions from SFM data"""
@@ -64,12 +73,11 @@ def main():
 
     # Initialize SuperGlue
     config = {
-        'weights': args.weights,
-        'weights_type': args.weightsType,  # <- new key
+        'weights': args.weightsType,
         'match_threshold': args.matchThreshold,
         'sinkhorn_iterations': 100
     }
-    superglue = SuperGlue(config).eval().to(device)
+    superglue = SuperGlue(config, args.weights).eval().to(device)
 
     # Read image pairs
     pairs = read_image_pairs(args.pairs)
