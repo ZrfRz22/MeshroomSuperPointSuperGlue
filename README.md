@@ -14,7 +14,7 @@ cd MeshroomSuperPointSuperGlue
 ### 3. Install Anaconda (if not already installed)
 - Download and install from: https://www.anaconda.com/products/distribution
 
-### 4. Install Python 3.7 (recommended for compatibility)
+### 4. Install Python 3.7 (64-bit) (recommended for compatibility)
 
 Download from:
 https://www.python.org/downloads/release/python-370/
@@ -27,18 +27,17 @@ https://www.python.org/downloads/release/python-370/
 
 ### 6. Create a Conda Environment with Python 3.7
 ```bash
-conda create -n meshroom37 python=3.7
+conda create -n myenv python=3.7
 ```
 
 ### 7. Activate the Environment
 ```bash
-conda activate meshroom37
+conda activate myenv
 ```
 
 ### 8. Install Required Python Packages
 ```bash
-pip install torch torchvision torchaudio
-pip install opencv-python numpy matplotlib pyinstaller
+pip install torch opencv-python numpy matplotlib pyinstaller
 ```
 
 ---
@@ -66,7 +65,7 @@ pyinstaller superGlue_featureMatching.spec
 
 ### 12. Go to AliceVision Binary Folder
 ```
-C:\Meshroom\aliceVision\bin
+path\to\Meshroom\aliceVision\bin
 ```
 
 ### 13. Copy Executables into AliceVision
@@ -75,19 +74,19 @@ C:\Meshroom\aliceVision\bin
   - `dist\superGlue_featureMatching\superGlue_featureMatching.exe`
 - Paste them into:
   ```
-  C:\Meshroom\aliceVision\bin
+  path\to\Meshroom\aliceVision\bin
   ```
 
 ### 14. Go to Meshroom `nodes` Folder
 ```
-C:\Meshroom\meshroom\nodes
+path\to\Meshroom\meshroom\nodes
 ```
 
 ### 15. Add the Plugin Node
 - Copy the `MLPlugin` folder from this repo.
 - Paste it into the `nodes` folder:
   ```
-  C:\Meshroom\meshroom\nodes\MLPlugin
+  path\to\Meshroom\meshroom\nodes\MLPlugin
   ```
 
 ---
@@ -95,8 +94,9 @@ C:\Meshroom\meshroom\nodes
 ## Run Meshroom
 
 ### 16. Launch Meshroom with Plugin Support
+- Open a new Command Prompt (not Anaconda Prompt, No environment activated).
 ```bash
-cd C:\Meshroom
+cd path\to\Meshroom
 .\Meshroom.exe
 ```
 
