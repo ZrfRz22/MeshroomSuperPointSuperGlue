@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/9d914cf0-d7a2-4a96-ae44-0c7e8707e9f4)## Installation Steps
+## Installation Steps
 
 ### 1. Download Prebuilt Meshroom
 - Go to the [Meshroom GitHub releases](https://github.com/alicevision/meshroom/releases).
