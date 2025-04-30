@@ -106,5 +106,11 @@ You should now see the `MLPlugin` nodes: `SuperPointFeatureExtraction` and `Supe
 
 ---
 
-![image](https://github.com/user-attachments/assets/7c03e8eb-1ff7-4241-b09b-753061fd778e)
+### 17. Add the SuperPoint and SuperGlue nodes
+- Right click the workspace at the bottom, and the SuperPoint node and SuperGlue node can be found in the ML Plugin section.
+![image](https://github.com/user-attachments/assets/1e0b35d2-61cf-4087-991a-41fa1556aad0)
+
+### 18. Remove Meshroom's original feature extraction and feature matching nodes
+
+
 
