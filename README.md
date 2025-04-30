@@ -1,17 +1,3 @@
-Here is the `README.md` file without the emojis:
-
-```markdown
-# Meshroom SuperPoint + SuperGlue Integration
-
-This project adds SuperPoint feature extraction and SuperGlue feature matching to Meshroom.
-
-## Prerequisites
-
-- Windows OS
-- Internet connection
-
----
-
 ## Installation Steps
 
 ### 1. Download Prebuilt Meshroom
