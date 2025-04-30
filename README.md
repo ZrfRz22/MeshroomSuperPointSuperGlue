@@ -1,4 +1,4 @@
-## Installation Steps
+![image](https://github.com/user-attachments/assets/9d914cf0-d7a2-4a96-ae44-0c7e8707e9f4)## Installation Steps
 
 ### 1. Download Prebuilt Meshroom
 - Go to the [Meshroom GitHub releases](https://github.com/alicevision/meshroom/releases).
@@ -105,3 +105,6 @@ cd path\to\Meshroom
 You should now see the `MLPlugin` nodes: `SuperPointFeatureExtraction` and `SuperGlueFeatureMatching` in the Meshroom node graph!
 
 ---
+
+![image](https://github.com/user-attachments/assets/7c03e8eb-1ff7-4241-b09b-753061fd778e)
+
