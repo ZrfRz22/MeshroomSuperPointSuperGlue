@@ -2,10 +2,9 @@ __version__ = "1.0"
 
 from meshroom.core import desc
 import os
-from pathlib import Path
 
 class SuperGlueFeatureMatching(desc.CommandLineNode):
-    commandLine = 'superGlue_featureMatching --input "{inputValue}" --pairs "{imagePairsValue}" --features {featuresValue} --output "{outputValue}" --weights "{weightsValue}" --weightsType {weightsType} --matchThreshold {matchingThresholdValue}{forceCpuFlag}'
+    commandLine = 'superGlue_featureMatching --input "{inputValue}" --pairs "{imagePairsValue}" --features {featuresValue} --output "{outputValue}" --weights "{weightsValue}" --weightsType {weightsType} --matchThreshold {matchingThresholdValue} --sinkhornIterations {sinkhornIterationsValue} --describerType {describerTypeValue}{forceCpuFlag}'
 
     category = 'ML Plugin'
     documentation = '''SuperGlue feature matcher for Meshroom.
@@ -62,6 +61,24 @@ class SuperGlueFeatureMatching(desc.CommandLineNode):
             range=(0.0, 1.0, 0.01),
             uid=[1],
         ),
+        desc.IntParam(
+            name="sinkhornIterations",
+            label="Sinkhorn Iterations",
+            description="Number of matching refinement iterations (lower = faster)",
+            value=20,
+            range=(1, 100, 1),
+            uid=[1],
+        ),
+        desc.ChoiceParam(
+            name="describerType",
+            label="Describer Type",
+            description="Describer types used to describe an image.",
+            values=['dspsift'],
+            value="dspsift",
+            exclusive=True,
+            joinChar=",",
+            uid=[1],
+        ),
         desc.BoolParam(
             name="forceCpu",
             label="Force CPU",
@@ -110,6 +127,8 @@ class SuperGlueFeatureMatching(desc.CommandLineNode):
             'weightsValue': weights_path,
             'weightsType': weights_type,  # Pass the actual type (indoor/outdoor)
             'matchingThresholdValue': chunk.node.matchingThreshold.value,
+            'sinkhornIterationsValue': chunk.node.sinkhornIterations.value,
+            'describerTypeValue': chunk.node.describerType.value,
             'forceCpuFlag': ' --forceCpu' if chunk.node.forceCpu.value else ''
         }
         
