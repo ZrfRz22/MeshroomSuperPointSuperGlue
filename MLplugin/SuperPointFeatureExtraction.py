@@ -4,7 +4,7 @@ from meshroom.core import desc
 import os
 
 class SuperPointFeatureExtraction(desc.CommandLineNode):
-    commandLine = 'superPoint_featureExtraction --input {inputValue} --output {outputValue} --weights {weightsValue} --maxKeypoints {maxKeypointsValue} --describerType {describerTypeValue}'
+    commandLine = 'superPoint_featureExtraction --input {inputValue} --output {outputValue} --weights {weightsValue} --maxKeypoints {maxKeypointsValue} --describerTypes {describerTypesValue}'
 
     category = 'ML Plugin'
     documentation = '''
@@ -38,12 +38,12 @@ Deep learning-based feature extraction using SuperPoint.
             uid=[1],
         ),
         desc.ChoiceParam(
-            name="describerType",
-            label="Describer Type",
+            name="describerTypes",
+            label="Describer Types",
             description="Output feature format",
-            values=["dspsift"],  # Simplified to supported types
-            value="dspsift",
-            exclusive=True,  # Changed from exclusive=False
+            values=["dspsift", "sift"],  # Simplified to supported types
+            value=["dspsift"],
+            exclusive=False,  # Changed from exclusive=False
             uid=[1],
         ),
     ]
@@ -63,3 +63,12 @@ Deep learning-based feature extraction using SuperPoint.
         # Verify weights exist during initialization
         if not os.path.exists(self.WEIGHTS_PATH):
             raise FileNotFoundError(f"SuperPoint weights not found at {self.WEIGHTS_PATH}")
+        
+    def getCommandLineArguments(self, chunk):
+        return {
+            'inputValue': chunk.node.input.value,
+            'outputValue': chunk.node.output.value,
+            'weightsValue': chunk.node.weights.value,
+            'maxKeypointsValue': chunk.node.maxKeypoints.value,
+            'describerTypesValue': ','.join(chunk.node.describerTypes.value),
+        }
