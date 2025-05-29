@@ -70,16 +70,14 @@ def dpsift_load_features(features_dir, view_id):
 
 def dpsift_save_matches(output_path, view_id0, view_id1, matches):
     valid_matches = [(i, m) for i, m in enumerate(matches) if m != -1]
-    log_message(f"Saving {len(valid_matches)} matches between {view_id0} and {view_id1} to {output_path}")
+    log_message(f"Appending {len(valid_matches)} matches between {view_id0} and {view_id1} to {output_path}")
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, 'w') as f:
+    with open(output_path, 'a') as f:
         f.write(f"{view_id0} {view_id1}\n")
         f.write("1\n")
         f.write(f"dspsift {len(valid_matches)}\n")
         for i, j in valid_matches:
             f.write(f"{i} {j}\n")
-    log_message("Matches saved successfully")
 
 def main(args):
     log_message(f"Starting SuperGlue matching with args: {args}")
@@ -147,7 +145,7 @@ def main(args):
             num_matches = np.sum(matches != -1)
             log_message(f"Found {num_matches} matches between {id0} and {id1}")
 
-            output_path = os.path.join(args['output'], f"{idx}.matches.txt")
+            output_path = os.path.join(args['output'], "0.matches.txt")
             dpsift_save_matches(output_path, id0, id1, matches)
 
         except Exception as e:
