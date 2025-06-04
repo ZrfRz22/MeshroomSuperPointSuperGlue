@@ -1,19 +1,42 @@
-__version__ = "1.0"
-
 from meshroom.core import desc
 import os
 
 class SuperPointFeatureExtraction(desc.CommandLineNode):
-    commandLine = 'superPoint_featureExtraction --input {inputValue} --output {outputValue} --weights {weightsValue} --maxKeypoints {maxKeypointsValue} --describerTypes {describerTypesValue}'
+    # Command line template for executing the feature extraction script
+    commandLine = (
+        'superPoint_featureExtraction '
+        '--input {inputValue} '
+        '--weights {weightsValue} '
+        '--maxKeypoints {maxKeypointsValue} '
+        '--describerTypes {describerTypesValue} '
+        '--output {outputValue}'
+    )
 
+    # Category of the node for grouping in Meshroom UI
     category = 'ML Plugin'
+
+    # Documentation string shown in Meshroom's node editor
     documentation = '''
-Deep learning-based feature extraction using SuperPoint.
+Deep Learning-Based Feature Extraction Using SuperPoint.
+
+This module integrates the SuperPoint neural network into the Meshroom photogrammetry workflow to perform keypoint detection and 
+descriptor extraction on input images. SuperPoint is a self-supervised deep learning model designed to identify salient interest 
+points and generate robust feature descriptors, enabling reliable matching in downstream tasks such as structure-from-motion (SfM) 
+and visual SLAM.
+
+Users can configure options such as the maximum number of keypoints to extract, the model weights to use, and the types of descriptors 
+to generate. The extracted features are saved in a format compatible with subsequent modules, such as SuperGlue for feature matching.
+
+Ensure that the SuperPoint weights are correctly specified and available before running the module.
 '''
 
-    WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), "data", "superpoint_v1.pth")
+    # Default path to the pretrained SuperPoint weights
+    WEIGHTS_PATH_TEMP = os.path.join(os.path.dirname(__file__), "data", "superpoint_v1.pth")
+    WEIGHTS_PATH = WEIGHTS_PATH_TEMP.replace("\\", "/")
 
+    # Define the input parameters for the node
     inputs = [
+        # Input SfMData file (usually contains camera intrinsics and image paths)
         desc.File(
             name="input",
             label="SfMData",
@@ -21,14 +44,18 @@ Deep learning-based feature extraction using SuperPoint.
             value="",
             uid=[0],
         ),
+
+        # Path to the pretrained SuperPoint weights (.pth format)
         desc.File(
             name="weights",
             label="SuperPoint Weights",
             description="Path to SuperPoint weights file (.pth).",
             value=WEIGHTS_PATH,
             uid=[1],
-            advanced=True,
+            advanced=True,  # Hidden by default in the UI unless in advanced mode
         ),
+
+        # Maximum number of keypoints to detect per image
         desc.IntParam(
             name="maxKeypoints",
             label="Max Keypoints",
@@ -37,38 +64,50 @@ Deep learning-based feature extraction using SuperPoint.
             range=(-1, 10000, 100),
             uid=[1],
         ),
+
+        # Choice of descriptor type (should match the one used in matching stage)
         desc.ChoiceParam(
             name="describerTypes",
             label="Describer Types",
             description="Output feature format",
-            values=["dspsift", "sift"],  # Simplified to supported types
+            values=["dspsift", "sift"], 
             value=["dspsift"],
-            exclusive=False,  # Changed from exclusive=False
+            exclusive=False,  # Allow multiple values if needed
             uid=[1],
         ),
     ]
 
+    # Define the outputs of the node
     outputs = [
+        # Output folder where the features and descriptors will be saved
         desc.File(
             name="output",
             label="Features Folder",
             description="Output path for the features and descriptors files.",
-            value=desc.Node.internalFolder,
+            value=desc.Node.internalFolder,  # Auto-generated internal path
             uid=[],
         ),
     ]
 
     def __init__(self):
         super().__init__()
-        # Verify weights exist during initialization
+        # Validate the existence of the SuperPoint weights file when initializing the node
         if not os.path.exists(self.WEIGHTS_PATH):
             raise FileNotFoundError(f"SuperPoint weights not found at {self.WEIGHTS_PATH}")
-        
-    def getCommandLineArguments(self, chunk):
-        return {
+
+    # Called for processing each chunk (e.g., per-image)
+    def processChunk(self, chunk):
+        # Prepare the actual values to substitute in the command line template
+        cmd_args = {
             'inputValue': chunk.node.input.value,
-            'outputValue': chunk.node.output.value,
             'weightsValue': chunk.node.weights.value,
             'maxKeypointsValue': chunk.node.maxKeypoints.value,
             'describerTypesValue': ','.join(chunk.node.describerTypes.value),
+            'outputValue': chunk.node.output.value
         }
+
+        # Format the command line string with the actual arguments
+        self.commandLine = self.commandLine.format(**cmd_args)
+
+        # Call the parent class's processing method to run the command
+        super().processChunk(chunk)

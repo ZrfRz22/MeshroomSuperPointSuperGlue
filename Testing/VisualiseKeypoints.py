@@ -5,8 +5,8 @@ import os
 class ImageViewer:
     def __init__(self):
         # Hardcoded file paths
-        self.image_path = r"C:\Users\zarif\OneDrive\Documents\Photogrammetry\Converse2Normal\20241126_221853.jpg"
-        self.feat_path = r"C:\Users\zarif\OneDrive\Documents\Photogrammetry\MeshroomCache\SuperPointFeatureExtraction\cf3c74960a15930e8bbb4bc4fd9f50134dfe945c\492971557.dspsift.feat"
+        self.image_path = r"C:\Users\zarif\OneDrive\Documents\Photogrammetry\Converse2Normal\20241126_221914.jpg"
+        self.feat_path = r"C:\Users\zarif\OneDrive\Documents\Photogrammetry\MeshroomCache\FeatureExtraction\b8b23850a1caab161fed6b6a2fb366979073e3cf\17750881.dspsift.feat"
         
         # Viewport parameters
         self.scale = 1.0

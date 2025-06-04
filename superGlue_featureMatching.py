@@ -1,3 +1,4 @@
+# ==================== SuperGlue Implementation ====================
 import os
 import numpy as np
 import torch
@@ -5,168 +6,291 @@ import json
 import struct
 import sys
 import time
+import argparse
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+from datetime import datetime, timedelta
+from dataclasses import dataclass
 from superglue import SuperGlue
 
-def log_message(message, flush=True):
-    print(f"[DEBUG][{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}", file=sys.stdout)
-    if flush:
+# ==================== SuperGlue Implementation ====================
+"""
+SuperGlue Feature Matcher Implementation
+
+This module implements a pipeline for feature matching using the SuperGlue model.
+It includes configuration, logging, feature loading, matching, and saving components.
+"""
+
+# ==================== Configuration Classes ====================
+@dataclass
+class SuperGlueConfig:
+    """Configuration for the SuperGlue feature matcher"""
+    weights_path: str            # Path to the model weights file
+    weights_type: str            # Type of weights ('indoor' or 'outdoor')
+    match_threshold: float = 0.7 # Matching threshold
+    sinkhorn_iterations: int = 20 # Number of Sinkhorn iterations
+    force_cpu: bool = False      # Force CPU usage even if GPU is available
+
+@dataclass
+class FeatureMatchingConfig:
+    """Configuration for the feature matching pipeline"""
+    input_sfm: str               # Path to input SfM data file
+    pairs_file: str              # File containing image pairs to match
+    features_dir: str            # Directory containing input features
+    output_dir: str              # Directory to save matches
+    describer_type: str = "dspsift"  # Type of feature descriptor
+
+# ==================== Logger (Singleton) ====================
+class Logger:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.start_time = time.time()
+        return cls._instance
+    
+    def log(self, message: str, level: str = "INFO"):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        elapsed = timedelta(seconds=time.time() - self.start_time)
+        log_entry = f"[{level}][{timestamp}][{elapsed}] {message}"
+        
+        if level == "ERROR":
+            print(log_entry, file=sys.stderr)
+        else:
+            print(log_entry, file=sys.stdout)
+        
         sys.stdout.flush()
 
-def load_all_pairs(pairs_file):
-    all_pairs = set()  # Use a set to automatically handle duplicate pairs
-    with open(pairs_file) as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                image_ids = line.split()
-                if len(image_ids) >= 2:
-                    for i in range(len(image_ids)):
-                        for j in range(i + 1, len(image_ids)):
-                            # Ensure consistent ordering within the pair (lexicographically)
-                            pair = tuple(sorted((image_ids[i], image_ids[j])))
-                            all_pairs.add(pair)
-    log_message(f"Loaded {len(all_pairs)} unique image pairs from {pairs_file}")
-    return list(all_pairs)
+    def progress(self, current: int, total: int, message: str = ""):
+        progress = (current / total) * 100
+        self.log(f"PROGRESS: {current}/{total} ({progress:.1f}%) {message}")
 
-def dpsift_load_features(features_dir, view_id):
-    feat_path = os.path.join(features_dir, f"{view_id}.dspsift.feat")
-    desc_path = os.path.join(features_dir, f"{view_id}.dspsift.desc")
-    conf_path = os.path.join(features_dir, f"{view_id}.confidence.txt")
+# ==================== Feature Loader (Abstract) ====================
+class FeatureLoader(ABC):
+    """Abstract base class for feature loaders"""
+    @abstractmethod
+    def load(self, features_dir: str, view_id: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Load features for a given view ID"""
+        pass
 
-    if not os.path.exists(feat_path):
-        raise FileNotFoundError(f"Feature file not found: {feat_path}")
-    if not os.path.exists(desc_path):
-        raise FileNotFoundError(f"Descriptor file not found: {desc_path}")
-    if not os.path.exists(conf_path):
-        raise FileNotFoundError(f"Confidence file not found: {conf_path}")
+# ==================== DPSIFT Loader ====================
+class DSPSiftLoader(FeatureLoader):
+    """Loader for DSP-SIFT format features"""
+    def load(self, features_dir: str, view_id: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Load features from DSP-SIFT format files"""
+        logger = Logger()
+        
+        # Define file paths
+        feat_path = os.path.join(features_dir, f"{view_id}.dspsift.feat")
+        desc_path = os.path.join(features_dir, f"{view_id}.dspsift.desc")
+        conf_path = os.path.join(features_dir, f"{view_id}.confidence.txt")
 
-    log_message(f"Loading features for view {view_id} from:\n- {feat_path}\n- {desc_path}\n- {conf_path}")
+        # Load keypoints (x, y)
+        with open(feat_path, 'r') as f:
+            kpts = np.array([list(map(float, line.strip().split()[:2])) for line in f], 
+                          dtype=np.float32)
 
-    # Read .feat file (text format: x y scale orientation)
-    with open(feat_path, 'r') as f:
-        kpts_data = []
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) >= 2:
-                kpts_data.append([float(parts[0]), float(parts[1])])
-    kpts = np.array(kpts_data, dtype=np.float32)
+        # Load descriptors (binary format)
+        with open(desc_path, 'rb') as f:
+            num_desc = struct.unpack('<I', f.read(4))[0]  # Number of descriptors
+            desc_dim = struct.unpack('<I', f.read(4))[0]  # Descriptor dimension
+            desc = np.fromfile(f, dtype=np.uint8, count=num_desc*desc_dim).reshape(-1, desc_dim)
 
-    # Read .desc file (binary format: num_desc, desc_dim, descriptors)
-    with open(desc_path, 'rb') as f:
-        num_desc = struct.unpack('<I', f.read(4))[0]
-        desc_dim = struct.unpack('<I', f.read(4))[0]
-        desc = np.fromfile(f, dtype=np.uint8, count=num_desc*desc_dim).reshape(-1, desc_dim)
+        # Load scores (text format)
+        with open(conf_path, 'r') as f:
+            scores = np.array([float(line.strip()) for line in f])
 
-    # Read confidence scores
-    with open(conf_path, 'r') as f:
-        scores = np.array([float(line.strip()) for line in f if line.strip()])
+        logger.log(f"Loaded {len(kpts)} features for {view_id}", "INFO")
+        return kpts, desc, scores
 
-    # Validate that all files have consistent number of features
-    if len(kpts) != num_desc or len(kpts) != len(scores):
-        raise ValueError(f"Mismatch between features: keypoints ({len(kpts)}), descriptors ({num_desc}), scores ({len(scores)})")
+# ==================== Feature Loader Factory ====================
+class FeatureLoaderFactory:
+    """Factory for creating feature loaders"""
+    @staticmethod
+    def create_loader(describer_type: str) -> FeatureLoader:
+        """Create a feature loader instance"""
+        if describer_type == "dspsift":
+            Logger().log("Creating DSP-SIFT feature loader", "INFO")
+            return DSPSiftLoader()
+        raise ValueError(f"Unsupported describer type: {describer_type}")
 
-    log_message(f"Loaded {len(kpts)} keypoints, {desc.shape} descriptors, and {len(scores)} scores for view {view_id}")
-    return kpts, desc, scores
+# ==================== Match Saver ====================
+class MatchSaver:
+    """Saver for match results"""
+    def __init__(self, describer_type: str):
+        self.describer_type = describer_type
+    
+    def save(self, output_path: str, view_id0: str, view_id1: str, matches: np.ndarray):
+        """Save matches to disk in DSP-SIFT format"""
+        # Filter out invalid matches (-1 indicates no match)
+        valid_matches = [(i, m) for i, m in enumerate(matches) if m != -1]
+        
+        with open(output_path, 'a') as f:
+            # Write match header
+            f.write(f"{view_id0} {view_id1}\n")
+            f.write("1\n")  # Version number
+            f.write(f"{self.describer_type} {len(valid_matches)}\n")
+            # Write individual matches
+            for i, j in valid_matches:
+                f.write(f"{i} {j}\n")
+        
+        Logger().log(f"Saved {len(valid_matches)} matches between {view_id0} and {view_id1}", "INFO")
 
-def dpsift_save_matches(output_path, view_id0, view_id1, matches):
-    valid_matches = [(i, m) for i, m in enumerate(matches) if m != -1]
-    log_message(f"Appending {len(valid_matches)} matches between {view_id0} and {view_id1} to {output_path}")
-
-    with open(output_path, 'a') as f:
-        f.write(f"{view_id0} {view_id1}\n")
-        f.write("1\n")
-        f.write(f"dspsift {len(valid_matches)}\n")
-        for i, j in valid_matches:
-            f.write(f"{i} {j}\n")
-
-def main(args):
-    log_message(f"Starting SuperGlue matching with args: {args}")
-
-    features_dirs = [d for d in args['featuresFolder'] if d.strip()]
-    if not features_dirs:
-        log_message("ERROR: No valid feature directories provided")
-        return
-    features_dir = features_dirs[0]
-
-    if not os.path.exists(features_dir):
-        log_message(f"ERROR: Feature directory does not exist: {features_dir}")
-        return
-
-    device = 'cuda' if torch.cuda.is_available() and not args.get('forceCpu', False) else 'cpu'
-
-    describer_dirs = args['describerTypes']  # Access the list of describer types
-    first_describer_dir = describer_dirs[0]  # Access the first describer type in the list
-    log_message(f"Using {first_describer_dir} features on {device.upper()}")
-
-    config = {
-        'weights': args['weightsType'],
-        'match_threshold': args.get('matchThreshold', 0.7),
-        'sinkhorn_iterations': args.get('sinkhornIterations', 20)
-    }
-
-    model = SuperGlue(config, args['weights']).eval().to(device)
-    log_message("Model initialized and set to eval mode")
-
-    pairs = load_all_pairs(args['pairs'])
-
-    os.makedirs(args['output'], exist_ok=True)
-    log_message(f"Created output directory: {args['output']}")
-
-    with open(args['input']) as f:
-        sfm_data = json.load(f)
-        shapes = {view['viewId']: (1, 1, int(view['height']), int(view['width'])) 
-                  for view in sfm_data['views']}
-    log_message(f"Loaded image shapes for {len(shapes)} views")
-
-    for idx, (id0, id1) in enumerate(pairs):
+# ==================== SuperGlue Matcher ====================
+class SuperGlueMatcher:
+    """Wrapper for SuperGlue matching model"""
+    def __init__(self, config: SuperGlueConfig):
+        self.logger = Logger()
+        self.device = 'cuda' if torch.cuda.is_available() and not config.force_cpu else 'cpu'
+        self.model = self._load_model(config)
+    
+    def _load_model(self, config: SuperGlueConfig):
+        """Load and initialize the SuperGlue model"""
         try:
-            log_message(f"\nProcessing pair {idx+1}/{len(pairs)}: {id0} - {id1}")
-
-            kpts0, desc0, scores0 = dpsift_load_features(features_dir, id0)
-            kpts1, desc1, scores1 = dpsift_load_features(features_dir, id1)
-
-            desc0 = torch.from_numpy(desc0.T).float() / 255.0
-            desc1 = torch.from_numpy(desc1.T).float() / 255.0
-
-            data = {
-                'keypoints0': torch.from_numpy(kpts0).float().unsqueeze(0).to(device),
-                'keypoints1': torch.from_numpy(kpts1).float().unsqueeze(0).to(device),
-                'descriptors0': desc0.unsqueeze(0).to(device),
-                'descriptors1': desc1.unsqueeze(0).to(device),
-                'scores0': torch.from_numpy(scores0).float().unsqueeze(0).to(device),
-                'scores1': torch.from_numpy(scores1).float().unsqueeze(0).to(device),
-                'image0': torch.empty(shapes[id0]).to(device),
-                'image1': torch.empty(shapes[id1]).to(device)
-            }
-
-            with torch.no_grad():
-                pred = model(data)
-            matches = pred['matches0'][0].cpu().numpy()
-            num_matches = np.sum(matches != -1)
-            log_message(f"Found {num_matches} matches between {id0} and {id1}")
-
-            output_path = os.path.join(args['output'], "0.matches.txt")
-            dpsift_save_matches(output_path, id0, id1, matches)
-
+            model = SuperGlue({
+                'weights': config.weights_type,
+                'match_threshold': config.match_threshold,
+                'sinkhorn_iterations': config.sinkhorn_iterations
+            }, config.weights_path).eval().to(self.device)
+            self.logger.log("SuperGlue model initialized", "INFO")
+            return model
         except Exception as e:
-            log_message(f"ERROR processing pair {id0}-{id1}: {str(e)}", flush=True)
-            continue
+            self.logger.log(f"Failed to load model: {str(e)}", "ERROR")
+            raise
+    
+    def match(self, data: Dict[str, torch.Tensor]) -> np.ndarray:
+        """Run SuperGlue matching on input data"""
+        with torch.no_grad():
+            return self.model(data)['matches0'][0].cpu().numpy()
 
-    log_message("\nMatching process completed")
+# ==================== Feature Matching Pipeline ====================
+class FeatureMatchingPipeline:
+    """Pipeline for SuperGlue feature matching"""
+    def __init__(self, config: FeatureMatchingConfig, superglue_config: SuperGlueConfig):
+        self.logger = Logger()
+        self.config = config
+        self.superglue = SuperGlueMatcher(superglue_config)
+        self.loader = FeatureLoaderFactory.create_loader(config.describer_type)
+        self.saver = MatchSaver(config.describer_type)
+        
+        # Load image shapes from SfM data
+        with open(config.input_sfm) as f:
+            self.shapes = {view['viewId']: (1, 1, int(view['height']), int(view['width'])) 
+                          for view in json.load(f)['views']}
+        
+        os.makedirs(config.output_dir, exist_ok=True)
+        self.logger.log("Feature matching pipeline initialized", "INFO")
+    
+    def run(self):
+        """Run the feature matching pipeline"""
+        pairs = self._load_pairs()
+        output_path = os.path.join(self.config.output_dir, "0.matches.txt")
+        
+        # Clear existing matches file if it exists
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        
+        total_matches = 0
+        start_time = time.time()
+        
+        for idx, (id0, id1) in enumerate(pairs, 1):
+            num_matches = self._process_pair(idx, len(pairs), id0, id1, output_path)
+            total_matches += num_matches
+        
+        # Final statistics
+        total_time = time.time() - start_time
+        self.logger.log("\n=== Matching Complete ===", "INFO")
+        self.logger.log(f"Total pairs processed: {len(pairs)}", "INFO")
+        self.logger.log(f"Total matches found: {total_matches}", "INFO")
+        self.logger.log(f"Average matches per pair: {total_matches/len(pairs):.1f}", "INFO")
+        self.logger.log(f"Total processing time: {total_time:.2f} seconds", "INFO")
+        self.logger.log(f"Processing rate: {len(pairs)/total_time:.2f} pairs/second", "INFO")
+        self.logger.log("Matching completed successfully", "INFO")
 
-if __name__ == "__main__":
-    import argparse
+    def _load_pairs(self) -> List[Tuple[str, str]]:
+        """Load image pairs from pairs file"""
+        pairs = set()
+        with open(self.config.pairs_file) as f:
+            for line in f:
+                ids = line.strip().split()
+                # Create all possible ordered pairs from the line
+                pairs.update(tuple(sorted((ids[i], ids[j]))) for i in range(len(ids)) for j in range(i+1, len(ids)))
+        self.logger.log(f"Loaded {len(pairs)} image pairs", "INFO")
+        return list(pairs)
+    
+    def _process_pair(self, pair_idx: int, total_pairs: int, id0: str, id1: str, output_path: str) -> int:
+        """Process a single image pair and return number of matches"""
+        logger = Logger()
+        logger.log(f"Processing pair {pair_idx}/{total_pairs}: {id0} vs {id1}", "INFO")
+        
+        try:
+            # Load features for both images
+            kpts0, desc0, scores0 = self.loader.load(self.config.features_dir, id0)
+            kpts1, desc1, scores1 = self.loader.load(self.config.features_dir, id1)
+            
+            # Prepare input data dictionary for SuperGlue
+            data = {
+                'keypoints0': torch.from_numpy(kpts0).float().unsqueeze(0).to(self.superglue.device),
+                'keypoints1': torch.from_numpy(kpts1).float().unsqueeze(0).to(self.superglue.device),
+                'descriptors0': (torch.from_numpy(desc0.T).float() / 255.0).unsqueeze(0).to(self.superglue.device),
+                'descriptors1': (torch.from_numpy(desc1.T).float() / 255.0).unsqueeze(0).to(self.superglue.device),
+                'scores0': torch.from_numpy(scores0).float().unsqueeze(0).to(self.superglue.device),
+                'scores1': torch.from_numpy(scores1).float().unsqueeze(0).to(self.superglue.device),
+                'image0': torch.empty(self.shapes[id0]).to(self.superglue.device),
+                'image1': torch.empty(self.shapes[id1]).to(self.superglue.device)
+            }
+            
+            # Run SuperGlue matching
+            matches = self.superglue.match(data)
+            num_matches = np.sum(matches != -1)
+            logger.log(f"Found {num_matches} matches", "INFO")
+            
+            # Save results
+            self.saver.save(output_path, id0, id1, matches)
+            
+            return num_matches
+            
+        except Exception as e:
+            logger.log(f"Failed to process pair {id0}-{id1}: {str(e)}", "ERROR")
+            return 0
+
+# ==================== Main ====================
+def main():
+    """Main entry point for SuperGlue feature matching"""
     parser = argparse.ArgumentParser(description='SuperGlue feature matching')
-    parser.add_argument('--input', required=True, help='Input SfMData file')
-    parser.add_argument('--pairs', required=True, help='File containing image pairs')
-    parser.add_argument('--featuresFolder', required=True, nargs='+', help='Feature directories')
-    parser.add_argument('--output', required=True, help='Output directory for matches')
-    parser.add_argument('--weights', required=True, help='Path to SuperGlue weights')
+    parser.add_argument('--input', required=True, help='Input SfM file')
+    parser.add_argument('--pairs', required=True, help='Pairs file')
+    parser.add_argument('--featuresFolder', required=True, help='Features directory')
+    parser.add_argument('--weights', required=True, help='Model weights path')
     parser.add_argument('--weightsType', choices=['indoor', 'outdoor'], required=True)
+    parser.add_argument('--output', required=True, help='Output directory')
+    parser.add_argument('--describerTypes', default='dspsift', help='Feature type')
     parser.add_argument('--matchThreshold', type=float, default=0.7)
     parser.add_argument('--sinkhornIterations', type=int, default=20)
-    parser.add_argument('--describerTypes', nargs='+', default=['dspsift'])
     parser.add_argument('--forceCpu', action='store_true')
     
     args = parser.parse_args()
-    main(vars(args))
+    
+    # Create configurations
+    superglue_config = SuperGlueConfig(
+        weights_path=args.weights,
+        weights_type=args.weightsType,
+        match_threshold=args.matchThreshold,
+        sinkhorn_iterations=args.sinkhornIterations,
+        force_cpu=args.forceCpu
+    )
+    
+    matching_config = FeatureMatchingConfig(
+        input_sfm=args.input,
+        pairs_file=args.pairs,
+        features_dir=args.featuresFolder,
+        output_dir=args.output,
+        describer_type=args.describerTypes
+    )
+    
+    # Run pipeline
+    FeatureMatchingPipeline(matching_config, superglue_config).run()
+
+if __name__ == "__main__":
+    main()
