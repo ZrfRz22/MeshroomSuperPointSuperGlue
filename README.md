@@ -1,108 +1,73 @@
-## Installation Steps
+# SuperPoint + SuperGlue Integration into Meshroom Pipeline
 
-### 1. Download Prebuilt Meshroom
-- Go to the [Meshroom GitHub releases](https://github.com/alicevision/meshroom/releases).
-- Download the latest **prebuilt binary** (e.g., `Meshroom-2023.3.0-win64.zip`).
-- Extract the contents to a folder, e.g., `C:\Meshroom`.
+## Introduction
 
-### 2. Clone This Project
-```bash
-git clone https://github.com/ZrfRz22/MeshroomSuperPointSuperGlue.git
-cd MeshroomSuperPointSuperGlue
-```
+This project integrates the **SuperPoint** model for feature extraction and the **SuperGlue** model for feature matching into the **Meshroom** photogrammetry pipeline. The goal is to create a **hybrid feature pipeline** that combines the strengths of both deep learning-based methods (SuperPoint and SuperGlue) and Meshroom’s traditional feature extraction and matching algorithms.By fusing these techniques, the project aims to enhance the **robustness and accuracy** of 3D reconstruction, especially in **challenging environments** where traditional methods may struggle, such as low-texture regions, repetitive patterns, inconsistent lighting conditions or significant viewpoint changes. This integration enables a more flexible and resilient pipeline that leverages both classical and learning-based approaches to improve feature matching quality across a wider range of real-world scenarios.
 
-### 3. Install Anaconda (if not already installed)
-- Download and install from: https://www.anaconda.com/products/distribution
-
-### 4. Install Python 3.7 (64-bit) (recommended for compatibility)
-
-Download from:
-https://www.python.org/downloads/release/python-370/
+Great! Here's a clean and structured **Installation** section for your README based on those steps:
 
 ---
 
-## Set Up Python Environment
+##  Installation
 
-### 5. Open Anaconda Command Prompt
+### 1. Environment Setup
 
-### 6. Create a Conda Environment with Python 3.7
-```bash
-conda create -n myenv python=3.7
-```
+1. **Download Meshroom (Windows Prebuilt Binary)**
+   - Get the latest release from the official [Meshroom GitHub repository](https://github.com/alicevision/meshroom/releases).
 
-### 7. Activate the Environment
-```bash
-conda activate myenv
-```
+2. **Install Python 3.7**
+   - Download Python 3.7 from the [official Python website](https://www.python.org/downloads/release).
+   - Ensure you download the correct version for your system (64-bit recommended).
 
-### 8. Install Required Python Packages
-```bash
-pip install torch opencv-python numpy matplotlib pyinstaller
-```
+3. **Install Anaconda**
+   - Download and install Anaconda from [here](https://www.anaconda.com/products/distribution).
+   - Open the **Anaconda Prompt** (CMD).
 
----
+4. **Create and Activate a New Conda Environment**
+   ```bash
+   conda create -n meshroom_env python=3.7
+   conda activate meshroom_env
+````
 
-## Build Executables
+5. **Install Required Dependencies**
+   *(Dependencies will be listed below once finalized)*
 
-### 9. Navigate to Project Directory
-```bash
-cd path\to\MeshroomSuperPointSuperGlue
-```
+6. **Navigate to Project Root Folder**
 
-### 10. Build SuperPoint Executable
-```bash
-pyinstaller superPoint_featureExtraction.spec
-```
+   ```bash
+   cd path\to\your\github\project
+   ```
 
-### 11. Build SuperGlue Executable
-```bash
-pyinstaller superGlue_featureMatching.spec
-```
+7. **Integrate MLPlugin Folder**
 
----
+   * Copy the `MLPlugin` folder from this repository.
+   * Paste it into:
 
-## Integrate with Meshroom
+     ```
+     path\to\Meshroom\meshroom\nodes
+     ```
 
-### 12. Go to AliceVision Binary Folder
-```
-path\to\Meshroom\aliceVision\bin
-```
+8. **Compile Executables Using PyInstaller**
 
-### 13. Copy Executables into AliceVision
-- Copy:
-  - `dist\superPoint_featureExtraction\superPoint_featureExtraction.exe`
-  - `dist\superGlue_featureMatching\superGlue_featureMatching.exe`
-- Paste them into:
-  ```
-  path\to\Meshroom\aliceVision\bin
-  ```
+   ```bash
+   pyinstaller superPoint_featureExtraction.spec
+   pyinstaller superGlue_featureMatching.spec
+   pyinstaller hybridFeatureCombiner.spec
+   ```
 
-### 14. Go to Meshroom `nodes` Folder
-```
-path\to\Meshroom\meshroom\nodes
-```
+9. **Copy Compiled Executables**
 
-### 15. Add the Plugin Node
-- Copy the `MLPlugin` folder from this repo.
-- Paste it into the `nodes` folder:
-  ```
-  path\to\Meshroom\meshroom\nodes\MLPlugin
-  ```
+   * After compilation, copy the generated `.exe` files into:
 
+     ```
+     path\to\Meshroom\aliceVision\bin
+     ```
 
----
+10. **Launch Meshroom**
 
-
-## Run Meshroom
-
-### 16. Launch Meshroom with Plugin Support
-- Open a new Command Prompt (not Anaconda Prompt, No environment activated).
-```bash
-cd path\to\Meshroom
-.\Meshroom.exe
-```
-
-You should now see the `MLPlugin` nodes: `SuperPointFeatureExtraction` and `SuperGlueFeatureMatching` in the Meshroom node graph!
+    ```bash
+    .\Meshroom.exe
+    ```
 
 ---
 
