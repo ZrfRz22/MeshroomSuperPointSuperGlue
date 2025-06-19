@@ -1,3 +1,4 @@
 from .SuperPointFeatureExtraction import SuperPointFeatureExtraction
 from .SuperGlueFeatureMatching import SuperGlueFeatureMatching
 from .HybridFeatureCombiner import HybridFeatureCombiner
+from .FeatureVisualizer import FeatureVisualizer

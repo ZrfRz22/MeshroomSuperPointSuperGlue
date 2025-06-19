@@ -137,13 +137,15 @@ class DSPSiftSuperPointExtractor(FeatureExtractor):
                 keypoints = np.flip(output['keypoints'][0].cpu().numpy(), axis=1)
                 descriptors = output['descriptors'][0].t().cpu().numpy()
                 scores = output['scores'][0].cpu().numpy()
+
+                descriptors = descriptors / (np.linalg.norm(descriptors, axis=1, keepdims=True) + 1e-8)
                 
                 # Normalize descriptors to 512 (DSP-SIFT standard)
-                descriptors = (descriptors / (np.linalg.norm(descriptors, axis=1, keepdims=True) + 1e-8) * 512)
-                descriptors = descriptors.astype(np.uint8)
+                # descriptors = (descriptors / (np.linalg.norm(descriptors, axis=1, keepdims=True) + 1e-8) * 512)
+                # descriptors = descriptors.astype(np.uint8)
             
             self.logger.log(f"Extracted {len(keypoints)} features from {image_path}", "INFO")
-            return keypoints, descriptors, scores
+            return keypoints, descriptors.astype(np.float32), scores
             
         except Exception as e:
             self.logger.log(f"Feature extraction failed for {image_path}: {str(e)}", "ERROR")
@@ -176,36 +178,35 @@ class FeatureSaver(ABC):
 
 # ==================== DSPSift Feature Saver ====================
 class DSPSiftFeatureSaver(FeatureSaver):
-    """Saver for DSP-SIFT format features"""
+    """Saver for DSP-SIFT format features with additional .npz saving"""
+
     def save(self, image_id: str, keypoints: np.ndarray, 
              descriptors: np.ndarray, scores: np.ndarray) -> None:
-        """Save features in DSP-SIFT format"""
+        """Save features in .feat format (for DSP-SIFT) and a .npz archive"""
         save_start = time.time()
         try:
             # Define output file paths
             feat_path = os.path.join(self.output_dir, f"{image_id}.dspsift.feat")
             desc_path = os.path.join(self.output_dir, f"{image_id}.dspsift.desc")
-            conf_path = os.path.join(self.output_dir, f"{image_id}.confidence.txt")
+            npz_path  = os.path.join(self.output_dir, f"{image_id}.features.npz")
 
-            # Save keypoints (text format)
+            # Format: x y scale orientation (here: scale=1.0, orientation=0.0 as placeholder)
             with open(feat_path, 'w') as f:
                 for x, y in keypoints:
                     f.write(f"{x} {y} 1.0 0.0\n")
-            
+
             # Save descriptors (binary format)
             with open(desc_path, 'wb') as f:
                 f.write(struct.pack('<I', keypoints.shape[0]))  # Number of features
                 f.write(struct.pack('<I', descriptors.shape[1]))  # Descriptor dimension
                 f.write(descriptors.tobytes())  # Descriptor data
-            
-            # Save scores (text format)
-            with open(conf_path, 'w') as f:
-                for score in scores:
-                    f.write(f"{score}\n")
-            
+
+            # Save all data as a compressed .npz file for efficient loading
+            np.savez_compressed(npz_path, keypoints=keypoints, descriptors=descriptors, scores=scores)
+
             save_time = time.time() - save_start
             self.logger.log(f"Saved {len(keypoints)} features for {image_id} in {save_time:.3f}s", "DEBUG")
-            
+
         except Exception as e:
             self.logger.log(f"Failed to save features for {image_id}: {str(e)}", "ERROR")
             raise

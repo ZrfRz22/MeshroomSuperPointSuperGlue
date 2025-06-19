@@ -1,4 +1,4 @@
-# ==================== SuperGlue Implementation ====================
+# ==================== SuperGlue Implementation with RANSAC ====================
 import os
 import numpy as np
 import torch
@@ -7,19 +7,12 @@ import struct
 import sys
 import time
 import argparse
+import cv2
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from superglue import SuperGlue
-
-# ==================== SuperGlue Implementation ====================
-"""
-SuperGlue Feature Matcher Implementation
-
-This module implements a pipeline for feature matching using the SuperGlue model.
-It includes configuration, logging, feature loading, matching, and saving components.
-"""
 
 # ==================== Configuration Classes ====================
 @dataclass
@@ -39,6 +32,8 @@ class FeatureMatchingConfig:
     features_dir: str            # Directory containing input features
     output_dir: str              # Directory to save matches
     describer_type: str = "dspsift"  # Type of feature descriptor
+    ransac_threshold: float = 3.0   # RANSAC inlier threshold (pixels)
+    ransac_max_trials: int = 1000   # Max RANSAC iterations
 
 # ==================== Logger (Singleton) ====================
 class Logger:
@@ -76,33 +71,23 @@ class FeatureLoader(ABC):
 
 # ==================== DPSIFT Loader ====================
 class DSPSiftLoader(FeatureLoader):
-    """Loader for DSP-SIFT format features"""
+    """Loader for SuperPoint .npz format features"""
     def load(self, features_dir: str, view_id: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Load features from DSP-SIFT format files"""
         logger = Logger()
         
-        # Define file paths
-        feat_path = os.path.join(features_dir, f"{view_id}.dspsift.feat")
-        desc_path = os.path.join(features_dir, f"{view_id}.dspsift.desc")
-        conf_path = os.path.join(features_dir, f"{view_id}.confidence.txt")
+        # Define .npz path
+        npz_path = os.path.join(features_dir, f"{view_id}.features.npz")
+        if not os.path.exists(npz_path):
+            raise FileNotFoundError(f"SuperPoint .npz file not found: {npz_path}")
 
-        # Load keypoints (x, y)
-        with open(feat_path, 'r') as f:
-            kpts = np.array([list(map(float, line.strip().split()[:2])) for line in f], 
-                          dtype=np.float32)
+        # Load SuperPoint features
+        with np.load(npz_path) as data:
+            keypoints = data['keypoints']      # (N, 2)
+            descriptors = data['descriptors']  # (N, D)
+            scores = data['scores']            # (N,)
 
-        # Load descriptors (binary format)
-        with open(desc_path, 'rb') as f:
-            num_desc = struct.unpack('<I', f.read(4))[0]  # Number of descriptors
-            desc_dim = struct.unpack('<I', f.read(4))[0]  # Descriptor dimension
-            desc = np.fromfile(f, dtype=np.uint8, count=num_desc*desc_dim).reshape(-1, desc_dim)
-
-        # Load scores (text format)
-        with open(conf_path, 'r') as f:
-            scores = np.array([float(line.strip()) for line in f])
-
-        logger.log(f"Loaded {len(kpts)} features for {view_id}", "INFO")
-        return kpts, desc, scores
+        logger.log(f"Loaded {len(keypoints)} SuperPoint features for {view_id}", "INFO")
+        return keypoints, descriptors, scores
 
 # ==================== Feature Loader Factory ====================
 class FeatureLoaderFactory:
@@ -137,6 +122,57 @@ class MatchSaver:
         
         Logger().log(f"Saved {len(valid_matches)} matches between {view_id0} and {view_id1}", "INFO")
 
+# ==================== RANSAC Filter ====================
+class RANSACFilter:
+    """Class for filtering matches using RANSAC"""
+    def __init__(self, threshold: float = 3.0, max_trials: int = 1000):
+        self.threshold = threshold  # Inlier threshold (pixels)
+        self.max_trials = max_trials  # Max RANSAC iterations
+        self.min_samples = 8 # Fundamental Matrix requires at least 8 points
+        self.logger = Logger()
+    
+    def filter_matches(self, kpts0: np.ndarray, kpts1: np.ndarray, matches: np.ndarray) -> np.ndarray:
+        """Filter matches using the Fundamental Matrix and RANSAC to find inliers."""
+        valid_indices = np.where(matches != -1)[0]
+        if len(valid_indices) < self.min_samples:
+            self.logger.log(f"Not enough matches ({len(valid_indices)}) for RANSAC", "WARNING")
+            return matches
+        
+        pts0 = kpts0[valid_indices]
+        pts1 = kpts1[matches[valid_indices]]
+        
+        # Find Fundamental Matrix using RANSAC
+        try:
+            # Use cv2.findFundamentalMat instead of findHomography
+            F, mask = cv2.findFundamentalMat(
+                pts0, pts1,
+                method=cv2.FM_RANSAC,
+                ransacReprojThreshold=self.threshold, # This is the key threshold in pixels
+                confidence=0.999, # Desired confidence level
+                maxIters=self.max_trials
+            )
+
+            if mask is None: # RANSAC failed to find a consensus
+                self.logger.log("RANSAC with Fundamental Matrix failed to find a model.", "WARNING")
+                return np.full_like(matches, -1) # Discard all matches for this pair
+
+            inliers = mask.ravel().astype(bool)
+            
+            # Create new matches array with outliers removed
+            filtered_matches = matches.copy()
+            filtered_matches[valid_indices[~inliers]] = -1
+            
+            self.logger.log(
+                f"RANSAC: Kept {inliers.sum()}/{len(valid_indices)} inliers "
+                f"(threshold={self.threshold}px)", 
+                "DEBUG"
+            )
+            return filtered_matches
+            
+        except Exception as e:
+            self.logger.log(f"RANSAC failed: {str(e)}", "WARNING")
+            return matches
+
 # ==================== SuperGlue Matcher ====================
 class SuperGlueMatcher:
     """Wrapper for SuperGlue matching model"""
@@ -166,13 +202,17 @@ class SuperGlueMatcher:
 
 # ==================== Feature Matching Pipeline ====================
 class FeatureMatchingPipeline:
-    """Pipeline for SuperGlue feature matching"""
+    """Pipeline for SuperGlue feature matching with RANSAC"""
     def __init__(self, config: FeatureMatchingConfig, superglue_config: SuperGlueConfig):
         self.logger = Logger()
         self.config = config
         self.superglue = SuperGlueMatcher(superglue_config)
         self.loader = FeatureLoaderFactory.create_loader(config.describer_type)
         self.saver = MatchSaver(config.describer_type)
+        self.ransac = RANSACFilter(
+            threshold=config.ransac_threshold,
+            max_trials=config.ransac_max_trials
+        )
         
         # Load image shapes from SfM data
         with open(config.input_sfm) as f:
@@ -180,7 +220,11 @@ class FeatureMatchingPipeline:
                           for view in json.load(f)['views']}
         
         os.makedirs(config.output_dir, exist_ok=True)
-        self.logger.log("Feature matching pipeline initialized", "INFO")
+        self.logger.log(
+            f"Initialized pipeline with RANSAC (threshold={config.ransac_threshold}px, "
+            f"max_trials={config.ransac_max_trials})", 
+            "INFO"
+        )
     
     def run(self):
         """Run the feature matching pipeline"""
@@ -192,21 +236,22 @@ class FeatureMatchingPipeline:
             os.remove(output_path)
         
         total_matches = 0
+        total_pairs = len(pairs)
         start_time = time.time()
         
         for idx, (id0, id1) in enumerate(pairs, 1):
-            num_matches = self._process_pair(idx, len(pairs), id0, id1, output_path)
+            num_matches = self._process_pair(idx, total_pairs, id0, id1, output_path)
             total_matches += num_matches
+            self.logger.progress(idx, total_pairs, f"Matches: {total_matches}")
         
         # Final statistics
         total_time = time.time() - start_time
         self.logger.log("\n=== Matching Complete ===", "INFO")
-        self.logger.log(f"Total pairs processed: {len(pairs)}", "INFO")
+        self.logger.log(f"Total pairs processed: {total_pairs}", "INFO")
         self.logger.log(f"Total matches found: {total_matches}", "INFO")
-        self.logger.log(f"Average matches per pair: {total_matches/len(pairs):.1f}", "INFO")
+        self.logger.log(f"Average matches per pair: {total_matches/total_pairs:.1f}", "INFO")
         self.logger.log(f"Total processing time: {total_time:.2f} seconds", "INFO")
-        self.logger.log(f"Processing rate: {len(pairs)/total_time:.2f} pairs/second", "INFO")
-        self.logger.log("Matching completed successfully", "INFO")
+        self.logger.log(f"Processing rate: {total_pairs/total_time:.2f} pairs/second", "INFO")
 
     def _load_pairs(self) -> List[Tuple[str, str]]:
         """Load image pairs from pairs file"""
@@ -221,20 +266,17 @@ class FeatureMatchingPipeline:
     
     def _process_pair(self, pair_idx: int, total_pairs: int, id0: str, id1: str, output_path: str) -> int:
         """Process a single image pair and return number of matches"""
-        logger = Logger()
-        logger.log(f"Processing pair {pair_idx}/{total_pairs}: {id0} vs {id1}", "INFO")
-        
         try:
             # Load features for both images
             kpts0, desc0, scores0 = self.loader.load(self.config.features_dir, id0)
             kpts1, desc1, scores1 = self.loader.load(self.config.features_dir, id1)
             
-            # Prepare input data dictionary for SuperGlue
+            # Prepare input data for SuperGlue
             data = {
                 'keypoints0': torch.from_numpy(kpts0).float().unsqueeze(0).to(self.superglue.device),
                 'keypoints1': torch.from_numpy(kpts1).float().unsqueeze(0).to(self.superglue.device),
-                'descriptors0': (torch.from_numpy(desc0.T).float() / 255.0).unsqueeze(0).to(self.superglue.device),
-                'descriptors1': (torch.from_numpy(desc1.T).float() / 255.0).unsqueeze(0).to(self.superglue.device),
+                'descriptors0': (torch.from_numpy(desc0.T).float()).unsqueeze(0).to(self.superglue.device),
+                'descriptors1': (torch.from_numpy(desc1.T).float()).unsqueeze(0).to(self.superglue.device),
                 'scores0': torch.from_numpy(scores0).float().unsqueeze(0).to(self.superglue.device),
                 'scores1': torch.from_numpy(scores1).float().unsqueeze(0).to(self.superglue.device),
                 'image0': torch.empty(self.shapes[id0]).to(self.superglue.device),
@@ -242,23 +284,32 @@ class FeatureMatchingPipeline:
             }
             
             # Run SuperGlue matching
-            matches = self.superglue.match(data)
-            num_matches = np.sum(matches != -1)
-            logger.log(f"Found {num_matches} matches", "INFO")
+            raw_matches = self.superglue.match(data)
+            raw_match_count = np.sum(raw_matches != -1)
             
-            # Save results
-            self.saver.save(output_path, id0, id1, matches)
+            # Apply RANSAC filtering
+            filtered_matches = self.ransac.filter_matches(kpts0, kpts1, raw_matches)
+            filtered_match_count = np.sum(filtered_matches != -1)
             
-            return num_matches
+            self.logger.log(
+                f"Pair {pair_idx}/{total_pairs}: {id0}-{id1} | "
+                f"Matches: {filtered_match_count} (after RANSAC) / {raw_match_count} (before)", 
+                "INFO"
+            )
+            
+            # Save filtered results
+            self.saver.save(output_path, id0, id1, filtered_matches)
+            
+            return filtered_match_count
             
         except Exception as e:
-            logger.log(f"Failed to process pair {id0}-{id1}: {str(e)}", "ERROR")
+            self.logger.log(f"Failed to process pair {id0}-{id1}: {str(e)}", "ERROR")
             return 0
 
 # ==================== Main ====================
 def main():
     """Main entry point for SuperGlue feature matching"""
-    parser = argparse.ArgumentParser(description='SuperGlue feature matching')
+    parser = argparse.ArgumentParser(description='SuperGlue feature matching with RANSAC')
     parser.add_argument('--input', required=True, help='Input SfM file')
     parser.add_argument('--pairs', required=True, help='Pairs file')
     parser.add_argument('--featuresFolder', required=True, help='Features directory')
@@ -269,6 +320,10 @@ def main():
     parser.add_argument('--matchThreshold', type=float, default=0.7)
     parser.add_argument('--sinkhornIterations', type=int, default=20)
     parser.add_argument('--forceCpu', action='store_true')
+    parser.add_argument('--ransacThreshold', type=float, default=1.5, 
+                       help='RANSAC inlier threshold (pixels)')
+    parser.add_argument('--ransacMaxTrials', type=int, default=1000, 
+                       help='Max RANSAC iterations')
     
     args = parser.parse_args()
     
@@ -286,7 +341,9 @@ def main():
         pairs_file=args.pairs,
         features_dir=args.featuresFolder,
         output_dir=args.output,
-        describer_type=args.describerTypes
+        describer_type=args.describerTypes,
+        ransac_threshold=args.ransacThreshold,
+        ransac_max_trials=args.ransacMaxTrials
     )
     
     # Run pipeline
