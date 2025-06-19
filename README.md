@@ -66,11 +66,17 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 * **Access Command Prompt**
 
   After installation, open the Anaconda Command Prompt.
+
+* **Clone the GitHub Repository**
+
+```bash
+git clone https://github.com/ZrfRz22/MeshroomSuperPointSuperGlue.git
+```
   
 * **Create and Activate Conda Environment with Python 3.7**
 
 ```bash
-conda create -n meshroom_env path/to/python=3.7
+conda create -n meshroom_env python=3.7
 conda activate meshroom_env
 ```
 
@@ -85,7 +91,7 @@ pip install torch==1.13.1
 * **Navigate to Project Directory**
 
 ```bash
-cd path/to/your/meshroom-superglue-project
+cd path/to/your/MeshroomSuperPointSuperGlue
 ```
 
 * **Copy `MLPlugin` Folder into Meshroom Nodes Folder**
@@ -102,6 +108,7 @@ xcopy /E /I MLPlugin "path\to\Meshroom\meshroom\nodes\MLPlugin"
 pyinstaller superPoint_featureExtraction.spec
 pyinstaller superGlue_featureMatching.spec
 pyinstaller hybridFeatureCombiner.spec
+pyinstaller featureVisualizer.spe
 ```
 
 * **Copy the Executables to Meshroom's AliceVision `bin` Folder**
@@ -132,13 +139,14 @@ Once Meshroom is launched, you will be greeted with the main user interface.
 Navigate to the workspace panel at the bottom of the screen.
 ![image](https://github.com/user-attachments/assets/819f7408-476d-4756-a683-9a3d81f96229)
 
-Right-click anywhere in the workspace and hover over the `MLPlugin` category:
-![image](https://github.com/user-attachments/assets/8a451984-dc06-4f17-bdb5-44e74af30773)
+Right-click anywhere in the workspace and hover over the `MLPlugin` category
 
 You will find the three main custom nodes:
    * `SuperPointFeatureExtraction`
    * `SuperGlueFeatureMatching`
    * `HybridFeatureCombiner`
+
+![image](https://github.com/user-attachments/assets/8a451984-dc06-4f17-bdb5-44e74af30773)
    
 Add all three nodes to the workspace:
 ![image](https://github.com/user-attachments/assets/47474b9e-a34b-4c1b-8b55-ebd6f5200856)
@@ -229,20 +237,13 @@ The Feature Visualizer is an optional node in the ML Plugin category that allows
 ![image](https://github.com/user-attachments/assets/57cc8530-adae-49e2-a12e-a5411188e313)
 
 3. Press the "Start" button at the top, and 2 windows should pop up, one for the first image and one for the other
-   Use the "Up" and "Down" arrow keys to cycle through each keypoint pair (Highlighted in red)
-   Use the "Left" and "Right" arrow keys to cycle between image pairs
-   All keypoints of an image are also displayed (coloured in green)
-   ![image](https://github.com/user-attachments/assets/0a1a015e-e8b1-4726-8d1c-745924a4d566)
+   - Use the "Up" and "Down" arrow keys to cycle through each keypoint pair (Highlighted in red)
+   - Use the "Left" and "Right" arrow keys to cycle between image pairs
+   - All keypoints of an image are also displayed (coloured in green)
+   - Press "r" to toggle between counter-clockwise and clockwise image rotation (In case of key point and image misalignment)
+   - Press "f" to flip the image vertcially (In case of key point and image misalignment)
 
-**Controls**
-
-| Key               | Action                                                      |
-|-------------------|-------------------------------------------------------------|
-| **⬆ / ⬇**         | Cycle through matched keypoints in the current image pair   |
-| **⬅ / ➡**       | Cycle between different image pairs                         |
-| **Esc**           | Exit the feature visualizer                                 |
-| **r**             | Toggle between counter-clockwise and clockwise image rotation (In case of key point and image misalignment)                                 |
-| **f**             | Flip the image vertcially (In case of key point and image misalignment)                                 |
+![image](https://github.com/user-attachments/assets/21c3c9c9-0d66-4fb9-ac18-17e3f95ba706)
 
 ---
 
@@ -265,11 +266,12 @@ To ensure consistent results and avoid unpredictable behavior:
 
 1. Set up the ML hybrid pipeline with all necessary nodes and connections.
 2. Select all the nodes in the pipeline and copy them.
-3. Then, when starting a new reconstruction:
-   - Go to the top menu and click `File > New > Photogrammetry Pipeline`.
-   - You will be given the generic photogrammetry pipeline.
-   - Paste the copied ML pipeline into the new workspace.
-   - Delete the provided generic pipeline, and repeat reconstruction.
+3. Then, click `File > New > Photogrammetry Pipeline` to create a new project.
+4. You will be given the generic photogrammetry pipeline.
+5. Paste the copied ML pipeline into the new workspace.
+6. Delete the provided generic pipeline.
+7. Recheck the connections of the pasted ML hybrid pipeline.
+8. Conduct reconstruction.
 
 This help provide a fresh and reliable environment for each new project session.
 
