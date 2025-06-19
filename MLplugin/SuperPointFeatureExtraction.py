@@ -2,22 +2,22 @@ from meshroom.core import desc
 import os
 
 class SuperPointFeatureExtraction(desc.CommandLineNode):
-    # Command line template for executing the feature extraction script
+    # Command line template for executing the SuperPoint feature extraction script
     commandLine = (
         'superPoint_featureExtraction '
         '--input {inputValue} '
         '--weights {weightsValue} '
         '--maxKeypoints {maxKeypointsValue} '
+        '--nmsRadius {nmsRadiusValue} '
         '--describerTypes {describerTypesValue} '
         '--output {outputValue}'
     )
 
-    # Category of the node for grouping in Meshroom UI
+    # Category shown in Meshroom UI
     category = 'ML Plugin'
 
-    # Documentation string shown in Meshroom's node editor
-    documentation = '''
-Deep Learning-Based Feature Extraction Using SuperPoint.
+    # Description shown in the Meshroom UI and documentation
+    documentation = '''Deep Learning-Based Feature Extraction Using SuperPoint.
 
 This module integrates the SuperPoint neural network into the Meshroom photogrammetry workflow to perform keypoint detection and 
 descriptor extraction on input images. SuperPoint is a self-supervised deep learning model designed to identify salient interest 
@@ -27,16 +27,15 @@ and visual SLAM.
 Users can configure options such as the maximum number of keypoints to extract, the model weights to use, and the types of descriptors 
 to generate. The extracted features are saved in a format compatible with subsequent modules, such as SuperGlue for feature matching.
 
-Ensure that the SuperPoint weights are correctly specified and available before running the module.
-'''
+Ensure that the SuperPoint weights are correctly specified and available before running the module.'''
 
     # Default path to the pretrained SuperPoint weights
     WEIGHTS_PATH_TEMP = os.path.join(os.path.dirname(__file__), "data", "superpoint_v1.pth")
     WEIGHTS_PATH = WEIGHTS_PATH_TEMP.replace("\\", "/")
 
-    # Define the input parameters for the node
+    # Input parameters for the node
     inputs = [
-        # Input SfMData file (usually contains camera intrinsics and image paths)
+        # Input SfMData file containing camera intrinsics/extrinsics and image list
         desc.File(
             name="input",
             label="SfMData",
@@ -51,8 +50,7 @@ Ensure that the SuperPoint weights are correctly specified and available before 
             label="SuperPoint Weights",
             description="Path to SuperPoint weights file (.pth).",
             value=WEIGHTS_PATH,
-            uid=[1],
-            advanced=True,  # Hidden by default in the UI unless in advanced mode
+            uid=[1], 
         ),
 
         # Maximum number of keypoints to detect per image
@@ -62,6 +60,16 @@ Ensure that the SuperPoint weights are correctly specified and available before 
             description="Maximum number of keypoints to detect (-1 for no limit).",
             value=1000,
             range=(-1, 10000, 100),
+            uid=[1],
+        ),
+
+        # Neighborhood radius for Non-Maximum Suppression or distance filtering
+        desc.IntParam(
+            name="nmsRadius",
+            label="NMS Radius",
+            description="Neighborhood radius for Non-Maximum Suppression or distance filtering.",
+            value=4,  # Default value; adjust as needed
+            range=(0, 50, 1),
             uid=[1],
         ),
 
@@ -102,6 +110,7 @@ Ensure that the SuperPoint weights are correctly specified and available before 
             'inputValue': chunk.node.input.value,
             'weightsValue': chunk.node.weights.value,
             'maxKeypointsValue': chunk.node.maxKeypoints.value,
+            'nmsRadiusValue': chunk.node.nmsRadius.value,
             'describerTypesValue': ','.join(chunk.node.describerTypes.value),
             'outputValue': chunk.node.output.value
         }

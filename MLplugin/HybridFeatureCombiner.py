@@ -1,7 +1,7 @@
 from meshroom.core import desc
 
 class HybridFeatureCombiner(desc.CommandLineNode):
-    # Command line template for executing the feature combiner tool
+    # Command line template for executing the Hybrid Feature Combiner tool
     commandLine = (
         'hybridFeatureCombiner '
         '--inputSfM {inputSfMValue} '
@@ -14,15 +14,15 @@ class HybridFeatureCombiner(desc.CommandLineNode):
         '--outputMatches {outputMatchesValue}'
     )
 
-    # Category label for the Meshroom UI
+    # Category shown in Meshroom UI
     category = 'ML Plugin'
 
     # Description shown in the Meshroom UI and documentation
-    documentation = '''
-    Combines features and matches from traditional (DSP-SIFT) and deep learning (SuperPoint/SuperGlue) approaches.
-    Creates a unified set of features and matches while removing duplicates.
-    Outputs separate folders for combined features and matches.
-    '''
+    documentation = '''Hybrid Feature Combiner
+    
+    Combines features and matches from traditional (DSP-SIFT) and deep learning (SuperPoint/SuperGlue) approaches. 
+    Creates a unified set of features and matches while removing duplicates. 
+    Outputs separate folders for combined features and matches.'''
 
     # List of valid feature describer types
     DESCRIBER_TYPES = [
@@ -32,7 +32,7 @@ class HybridFeatureCombiner(desc.CommandLineNode):
 
     # Input parameters for the node
     inputs = [
-        # Input SfMData file (camera intrinsics, extrinsics, etc.)
+        # Input SfMData file containing camera intrinsics/extrinsics and image list
         desc.File(
             name="inputSfM",
             label="Input SfMData",
@@ -40,7 +40,7 @@ class HybridFeatureCombiner(desc.CommandLineNode):
             value="",
             uid=[0],
         ),
-        # List of original (classical) feature folders
+        # Folders with extracted features using traditional feature extraction
         desc.ListAttribute(
             elementDesc=desc.File(
                 name="inputFeature",
@@ -54,7 +54,7 @@ class HybridFeatureCombiner(desc.CommandLineNode):
             description="Folders containing extracted features.",
             group="",
         ),
-        # Original match file folder (from traditional methods)
+        # Folders with matched features using traditional feature matching 
         desc.File(
             name="inputMatches",
             label="Original Matches",
@@ -62,7 +62,7 @@ class HybridFeatureCombiner(desc.CommandLineNode):
             value="",
             uid=[0],
         ),
-        # List of SuperPoint feature folders
+        # Folders with extracted features using SuperPoint
         desc.ListAttribute(
             elementDesc=desc.File(
                 name="superpointFeature",
@@ -76,7 +76,7 @@ class HybridFeatureCombiner(desc.CommandLineNode):
             description="Folders containing extracted features.",
             group="",
         ),
-        # Match file folder from SuperGlue
+        # Folders with matched features using traditional SuperGlue
         desc.File(
             name="superglueMatches",
             label="SuperGlue Matches",
@@ -84,7 +84,7 @@ class HybridFeatureCombiner(desc.CommandLineNode):
             value="",
             uid=[0],
         ),
-        # Describer type(s) for the output (can be multiple)
+        # Describer type for the output (can be multiple)
         desc.ChoiceParam(
             name="describerTypes",
             label="Describer Types",
@@ -114,9 +114,9 @@ class HybridFeatureCombiner(desc.CommandLineNode):
         ),
     ]
 
-    # Method that runs when a chunk of the pipeline is being processed
+    # Called to run the command for a chunk of input data
     def processChunk(self, chunk):
-        # Build a dictionary of command-line arguments using current node parameters
+        # Create dictionary of arguments to substitute into commandLine string
         cmd_args = {
             'inputSfMValue': chunk.node.inputSfM.value,
             'inputFeaturesValue': ' '.join(f'"{f.value}"' for f in chunk.node.inputFeatures.value if f.value),
@@ -131,5 +131,5 @@ class HybridFeatureCombiner(desc.CommandLineNode):
         # Fill in the command line with actual values
         self.commandLine = self.commandLine.format(**cmd_args)
 
-        # Call the base class implementation (which likely runs the command)
+        # Call the base class implementation
         super().processChunk(chunk)

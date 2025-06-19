@@ -1,7 +1,7 @@
 from meshroom.core import desc
 
 class FeatureVisualizer(desc.CommandLineNode):
-    # Command line template for executing the feature combiner tool
+    # # Command line template for executing the Feature Visualizer tool
     commandLine = (
         'featureVisualizer '
         '--inputSfM {inputSfMValue} '
@@ -9,19 +9,20 @@ class FeatureVisualizer(desc.CommandLineNode):
         '--inputMatches {inputMatchesValue} '
     )
 
-    # Category label for the Meshroom UI
+    # Category shown in Meshroom UI
     category = 'ML Plugin'
 
     # Description shown in the Meshroom UI and documentation
-    documentation = '''
-    Combines features and matches from traditional (DSP-SIFT) and deep learning (SuperPoint/SuperGlue) approaches.
-    Creates a unified set of features and matches while removing duplicates.
-    Outputs separate folders for combined features and matches.
+    documentation = '''Feature and Matches Visualizer
+
+    Visualizes the key points and matches for each matched image pairs. 
+    Users can cycle through each pair of matched key points between two images to verify the accuracy and robustness of the feature extraction and matching process in a convenient manner. 
+    This node has no output, and is only meant to visualize the matches in a separate window.
     '''
 
     # Input parameters for the node
     inputs = [
-        # Input SfMData file (camera intrinsics, extrinsics, etc.)
+        # Input SfMData file containing camera intrinsics/extrinsics and image list
         desc.File(
             name="inputSfM",
             label="Input SfMData",
@@ -29,7 +30,7 @@ class FeatureVisualizer(desc.CommandLineNode):
             value="",
             uid=[0],
         ),
-        # List of original (classical) feature folders
+        # List feature folders
         desc.ListAttribute(
             elementDesc=desc.File(
                 name="inputFeature",
@@ -43,18 +44,15 @@ class FeatureVisualizer(desc.CommandLineNode):
             description="Folders containing extracted features.",
             group="",
         ),
-        # Original match file folder (from traditional methods)
+        # Matches file folder
         desc.File(
             name="inputMatches",
             label="Original Matches",
-            description="Folder containing original match files.",
+            description="Folder containing matched features.",
             value="",
             uid=[0],
         ),
     ]
-
-    # Output folders for the combined features and matches
-    outputs = []
 
     # Method that runs when a chunk of the pipeline is being processed
     def processChunk(self, chunk):
@@ -68,5 +66,5 @@ class FeatureVisualizer(desc.CommandLineNode):
         # Fill in the command line with actual values
         self.commandLine = self.commandLine.format(**cmd_args)
 
-        # Call the base class implementation (which likely runs the command)
+        # Call the base class implementation
         super().processChunk(chunk)

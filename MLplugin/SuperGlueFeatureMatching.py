@@ -2,7 +2,7 @@ from meshroom.core import desc
 import os
 
 class SuperGlueFeatureMatching(desc.CommandLineNode):
-    # Command line pattern used to call the SuperGlue matcher
+    # Command line template for executing the SuperGlue feature matching script
     commandLine = (
         'superGlue_featureMatching '
         '--input {inputValue} '
@@ -13,6 +13,8 @@ class SuperGlueFeatureMatching(desc.CommandLineNode):
         '--matchThreshold {matchingThresholdValue} '
         '--sinkhornIterations {sinkhornIterationsValue} '
         '--describerTypes {describerTypesValue} '
+        '--ransacThreshold {ransacThresholdValue} '
+        '--ransacMaxTrials {ransacMaxTrialsValue} '
         '--output {outputValue} '
         '{forceCpuFlag}'
     )
@@ -40,6 +42,7 @@ Before execution, make sure the required SuperGlue weights are available in the 
     WEIGHTS_INDOOR = WEIGHTS_INDOOR_TEMP.replace("\\", "/")
     WEIGHTS_OUTDOOR = WEIGHTS_OUTDOOR_TEMP.replace("\\", "/")
 
+    # Input parameters for the node
     inputs = [
         # Input SfMData file containing camera intrinsics/extrinsics and image list
         desc.File(
@@ -50,7 +53,7 @@ Before execution, make sure the required SuperGlue weights are available in the 
             uid=[0],
         ),
 
-        # Text file listing the image pairs to be matched (e.g., image1.jpg image2.jpg)
+        # Text file listing the image pairs to be matched 
         desc.File(
             name="imagePairs",
             label="Image Pairs",
@@ -59,7 +62,7 @@ Before execution, make sure the required SuperGlue weights are available in the 
             uid=[0],
         ),
 
-        # List of folders where image features (e.g., SuperPoint keypoints/descriptors) are stored
+        # List of folders where image features are stored
         desc.ListAttribute(
             elementDesc=desc.File(
                 name="featuresFolder",
@@ -74,7 +77,7 @@ Before execution, make sure the required SuperGlue weights are available in the 
             group="",
         ),
 
-        # Selection of pretrained SuperGlue weights: 'indoor' or 'outdoor' model
+        # Selection of pretrained SuperGlue weights: 'indoor' or 'outdoor'
         desc.ChoiceParam(
             name="weightsChoice",
             label="Weights Type",
@@ -105,7 +108,7 @@ Before execution, make sure the required SuperGlue weights are available in the 
             uid=[1],
         ),
 
-        # Types of describers used for feature representation (e.g., 'sift', 'dspsift')
+        # Types of describers used for feature representation
         desc.ChoiceParam(
             name="describerTypes",
             label="Describer Types",
@@ -124,12 +127,30 @@ Before execution, make sure the required SuperGlue weights are available in the 
             value=False,
             uid=[1],
         ),
+        # RANSAC inlier threshold in pixels
+        desc.FloatParam(
+            name="ransacThreshold",
+            label="RANSAC Threshold",
+            description="RANSAC inlier threshold (pixels)",
+            value=1.5,
+            range=(0.1, 10.0, 0.1),
+            uid=[1],
+        ),
+
+        # Maximum number of RANSAC iterations
+        desc.IntParam(
+            name="ransacMaxTrials",
+            label="RANSAC Max Trials",
+            description="Maximum number of RANSAC iterations",
+            value=1000,
+            range=(100, 10000, 100),
+            uid=[1],
+        ),
     ]
 
 
     # Output folder for resulting match files
     outputs = [
-        # Output folder to store the resulting match files
         desc.File(
             name="output",
             label="Matches Folder",
@@ -162,11 +183,13 @@ Before execution, make sure the required SuperGlue weights are available in the 
             'sinkhornIterationsValue': chunk.node.sinkhornIterations.value,
             'describerTypesValue': ' '.join(f for f in chunk.node.describerTypes.value),
             'outputValue': chunk.node.output.value,
-            'forceCpuFlag': ' --forceCpu' if chunk.node.forceCpu.value else ''
+            'forceCpuFlag': ' --forceCpu' if chunk.node.forceCpu.value else '',
+            'ransacThresholdValue': chunk.node.ransacThreshold.value, 
+            'ransacMaxTrialsValue': chunk.node.ransacMaxTrials.value
         }
 
-        # Format the command line string with actual values
+        # Fill in the command line with actual values
         self.commandLine = self.commandLine.format(**cmd_args)
 
-        # Execute the command
+        # Call the base class implementatio
         super().processChunk(chunk)
