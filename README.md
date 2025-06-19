@@ -27,7 +27,7 @@ Great! Here's a clean and structured **Installation** section for your README ba
    ```bash
    conda create -n meshroom_env python=3.7
    conda activate meshroom_env
-````
+   ```
 
 5. **Install Required Dependencies**
    *(Dependencies will be listed below once finalized)*
@@ -42,7 +42,6 @@ Great! Here's a clean and structured **Installation** section for your README ba
 
    * Copy the `MLPlugin` folder from this repository.
    * Paste it into:
-
      ```
      path\to\Meshroom\meshroom\nodes
      ```
@@ -58,7 +57,6 @@ Great! Here's a clean and structured **Installation** section for your README ba
 9. **Copy Compiled Executables**
 
    * After compilation, copy the generated `.exe` files into:
-
      ```
      path\to\Meshroom\aliceVision\bin
      ```
