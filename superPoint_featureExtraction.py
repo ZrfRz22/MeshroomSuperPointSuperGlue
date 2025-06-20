@@ -175,39 +175,58 @@ class FeatureSaver(ABC):
 
     # Save features to disk
     @abstractmethod
-    def save(self, image_id: str, keypoints: np.ndarray,
+    def save(self, image_id: str, image_path: str, keypoints: np.ndarray,
              descriptors: np.ndarray, scores: np.ndarray) -> None:
         pass
 
 # ==================== Concrete Feature Saver ====================
 class DSPSiftFeatureSaver(FeatureSaver):
     # Saver for DSP-SIFT format features with additional .npz saving
-    def save(self, image_id: str, keypoints: np.ndarray,
-             descriptors: np.ndarray, scores: np.ndarray) -> None:
+    def save(self, image_id: str, image_path: str, keypoints: np.ndarray,
+         descriptors: np.ndarray, scores: np.ndarray) -> None:
         # Save features in .feat format (for DSP-SIFT) and a .npz archive
         save_start = time.time()
         try:
             # Define output file paths
             feat_path = os.path.join(self.output_dir, f"{image_id}.dspsift.feat")
             desc_path = os.path.join(self.output_dir, f"{image_id}.dspsift.desc")
-            npz_path  = os.path.join(self.output_dir, f"{image_id}.features.npz")
+            npz_path = os.path.join(self.output_dir, f"{image_id}.features.npz")
 
-            # Format: x y scale orientation (here: scale=1.0, orientation=0.0 as placeholder)
+             # Load image to get dimensions
+            img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                raise ValueError(f"Failed to read image {image_path}")
+            
+            image_width = img.shape[1]  # Get height for vertical flip
+            
+            # Flip coordinates VERTICALLY
+            flipped_keypoints = keypoints.copy()
+            if flipped_keypoints.size > 0:
+                flipped_keypoints[:, 1] = (image_width - 1) - keypoints[:, 1]  # Flip Y-coordinates
+
+            # Save FLIPPED coordinates to .feat file
             with open(feat_path, 'w') as f:
-                for x, y in keypoints:
+                for x, y in flipped_keypoints:
                     f.write(f"{x} {y} 1.0 0.0\n")
 
-            # Save descriptors (binary format)
+            # Save ORIGINAL descriptors to .desc file
             with open(desc_path, 'wb') as f:
-                f.write(struct.pack('<I', keypoints.shape[0]))  # Number of features
-                f.write(struct.pack('<I', descriptors.shape[1]))  # Descriptor dimension
-                f.write(descriptors.tobytes())  # Descriptor data
+                f.write(struct.pack('<I', keypoints.shape[0]))
+                f.write(struct.pack('<I', descriptors.shape[1]))
+                f.write(descriptors.tobytes())
 
-            # Save all data as a compressed .npz file for efficient loading
-            np.savez_compressed(npz_path, keypoints=keypoints, descriptors=descriptors, scores=scores)
+            # Save ORIGINAL data to .npz file
+            np.savez_compressed(npz_path, 
+                            keypoints=keypoints,      # Original coordinates
+                            descriptors=descriptors, 
+                            scores=scores)
 
             save_time = time.time() - save_start
             self.logger.log(f"Saved {len(keypoints)} features for {image_id} in {save_time:.3f}s", "DEBUG")
+            self.logger.log(
+                f"Saved {len(keypoints)} features | "
+                f"Horizontal mirroring applied to .feat | "
+            )
 
         except Exception as e:
             self.logger.log(f"Failed to save features for {image_id}: {str(e)}", "ERROR")
@@ -250,7 +269,7 @@ class SuperPointExtractionPipeline:
                 
                 # Extract and save features
                 keypoints, descriptors, scores = self.extractor.extract(image_path)
-                self.saver.save(image_id, keypoints, descriptors, scores)
+                self.saver.save(image_id, image_path, keypoints, descriptors, scores)
                 total_features += len(keypoints)
                 
             except Exception as e:
