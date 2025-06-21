@@ -223,11 +223,7 @@ class DSPSiftFeatureSaver(FeatureSaver):
 
             save_time = time.time() - save_start
             self.logger.log(f"Saved {len(keypoints)} features for {image_id} in {save_time:.3f}s", "DEBUG")
-            self.logger.log(
-                f"Saved {len(keypoints)} features | "
-                f"Horizontal mirroring applied to .feat | "
-            )
-
+            
         except Exception as e:
             self.logger.log(f"Failed to save features for {image_id}: {str(e)}", "ERROR")
             raise

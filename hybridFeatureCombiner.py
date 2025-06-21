@@ -3,7 +3,6 @@ import os
 import sys
 import json
 import time
-import struct
 import argparse
 from collections import defaultdict
 from typing import Dict, List, Tuple, Set
@@ -53,7 +52,7 @@ class Logger:
 class FeatureLoader(ABC):
     # Must be implemented by all feature loader classes
     @abstractmethod
-    def load(self, view_id: str) -> Tuple[np.ndarray, np.ndarray, int]:
+    def load(self, view_id: str) -> np.ndarray:  # Changed to return only keypoints
         # Load features for a given image/view ID
         pass
 
@@ -66,13 +65,12 @@ class DSPSiftFeatureLoader(FeatureLoader):
         self.features_dir = features_dir
         self.logger = Logger()
 
-    def load(self, view_id: str) -> Tuple[np.ndarray, np.ndarray, int]:
-        # Loads keypoints and descriptors for one image
+    def load(self, view_id: str) -> np.ndarray:  # Changed to return only keypoints
+        # Loads keypoints for one image
         self.logger.log(f"Loading features for view {view_id}", "DEBUG")
 
-        # Set file paths for keypoints and descriptors
+        # Set file paths for keypoints
         feat_path = os.path.join(self.features_dir, f"{view_id}.dspsift.feat")
-        desc_path = os.path.join(self.features_dir, f"{view_id}.dspsift.desc")
 
         # Load keypoints from the .feat file
         load_start = time.time()
@@ -91,30 +89,12 @@ class DSPSiftFeatureLoader(FeatureLoader):
             self.logger.log(f"Failed to load keypoints for {view_id}: {str(e)}", "ERROR")
             raise
 
-        # Load descriptors from the .desc binary file
-        desc_dim = 0
-        desc = []
-        try:
-            with open(desc_path, 'rb') as f:
-                # First 4 bytes = number of features
-                num_features = struct.unpack('<I', f.read(4))[0]
-                # Next 4 bytes = descriptor dimension
-                desc_dim = struct.unpack('<I', f.read(4))[0]
-                # Read the descriptors
-                desc = np.fromfile(f, dtype=np.uint8, count=num_features * desc_dim)
-                desc = desc.reshape(num_features, desc_dim)
-        except Exception as e:
-            # Log and raise error if descriptors fail to load
-            self.logger.log(f"Failed to load descriptors for {view_id}: {str(e)}", "ERROR")
-            raise
-
         # Log how long it took to load
         load_time = time.time() - load_start
-        self.logger.log(f"Loaded {len(kpts)} features (dim={desc_dim}) for {view_id} in {load_time:.3f}s", "DEBUG")
+        self.logger.log(f"Loaded {len(kpts)} features for {view_id} in {load_time:.3f}s", "DEBUG")
 
-        # Return keypoints, descriptors, and descriptor dimension
-        return np.array(kpts), np.array(desc), desc_dim
-
+        # Return keypoints
+        return np.array(kpts)
 
 # ==================== Feature Loader Factory ====================
 class FeatureLoaderFactory:
@@ -128,14 +108,12 @@ class FeatureLoaderFactory:
         # Raise error if loader type is unknown
         raise ValueError(f"Unknown loader type: {loader_type}")
 
-
 # ==================== Abstract Feature Combiner ====================
 class FeatureCombiner(ABC):
     # Base class for feature combiners
     @abstractmethod
-    def combine(self, features1: Tuple[np.ndarray, np.ndarray, int], 
-                features2: Tuple[np.ndarray, np.ndarray, int]) -> Tuple[np.ndarray, np.ndarray, int, np.ndarray]:
-        # Method to combine two sets of features
+    def combine(self, features1: np.ndarray, features2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        # Method to combine two sets of features (keypoints only)
         pass
 
 # ==================== Concrete Feature Combiner ====================
@@ -145,38 +123,36 @@ class DSPSiftFeatureCombiner(FeatureCombiner):
         self.distance_threshold = distance_threshold
         self.logger = Logger()
     
-    def combine(self, features1, features2):
+    def combine(self, features1: np.ndarray, features2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         # Combine features and remove duplicates based on distance
         self.logger.log("Starting feature combination", "DEBUG")
-        orig_kpts, orig_desc, orig_dim = features1
-        super_kpts, super_desc, super_dim = features2
+        orig_kpts = features1
+        super_kpts = features2
         
         # Log number of features
-        self.logger.log(f"Original features: {len(orig_kpts)} (dim={orig_dim})", "DEBUG")
-        self.logger.log(f"SuperPoint features: {len(super_kpts)} (dim={super_dim})", "DEBUG")
+        self.logger.log(f"Original features: {len(orig_kpts)}", "DEBUG")
+        self.logger.log(f"SuperPoint features: {len(super_kpts)}", "DEBUG")
         
         # Handle cases with no features
         if len(orig_kpts) == 0:
             self.logger.log("No original features, returning SuperPoint features", "DEBUG")
-            return super_kpts, super_desc, super_dim, np.arange(len(super_kpts))
+            return super_kpts, np.arange(len(super_kpts))
         if len(super_kpts) == 0:
             self.logger.log("No SuperPoint features, returning original features", "DEBUG")
-            return orig_kpts, orig_desc, orig_dim, np.arange(len(orig_kpts))
+            return orig_kpts, np.arange(len(orig_kpts))
         
         # Start combining
         combine_start = time.time()
         combined_kpts = []
-        combined_desc = []
         index_mapping = []
         duplicates_found = 0
         
         # Add original features first
         combined_kpts.extend(orig_kpts)
-        combined_desc.extend(orig_desc)
         orig_indices = list(range(len(orig_kpts)))
         
         # Check each SuperPoint feature
-        for i, (super_kpt, super_d) in enumerate(zip(super_kpts, super_desc)):
+        for i, super_kpt in enumerate(super_kpts):
             duplicate = False
             super_xy = super_kpt[:2]
             
@@ -188,42 +164,12 @@ class DSPSiftFeatureCombiner(FeatureCombiner):
                     # Replace if SuperPoint has larger scale
                     if super_kpt[2] > orig_kpt[2]:
                         combined_kpts[j] = super_kpt
-                        combined_desc[j] = super_d
                     break
             
             # If not duplicate, add it
             if not duplicate:
                 combined_kpts.append(super_kpt)
-                combined_desc.append(super_d)
                 orig_indices.append(len(orig_kpts) + i)
-        
-        # Set output descriptor dimension
-        output_dim = max(orig_dim, super_dim)
-        
-        # Pad descriptors to same dimension if needed
-        if orig_dim != super_dim:
-            self.logger.log(f"Padding descriptors from {orig_dim}/{super_dim} to {output_dim}", "DEBUG")
-            padded_desc = []
-            for i, desc in enumerate(combined_desc):
-                if i < len(orig_kpts):
-                    # Pad original descriptor
-                    if orig_dim < output_dim:
-                        padded = np.zeros(output_dim, dtype=np.uint8)
-                        padded[:orig_dim] = desc
-                        padded_desc.append(padded)
-                    else:
-                        padded_desc.append(desc)
-                else:
-                    # Pad SuperPoint descriptor
-                    if super_dim < output_dim:
-                        padded = np.zeros(output_dim, dtype=np.uint8)
-                        padded[:super_dim] = desc
-                        padded_desc.append(padded)
-                    else:
-                        padded_desc.append(desc)
-            combined_desc = np.array(padded_desc)
-        else:
-            combined_desc = np.array(combined_desc)
         
         # Log combination result
         combine_time = time.time() - combine_start
@@ -233,7 +179,7 @@ class DSPSiftFeatureCombiner(FeatureCombiner):
             "DEBUG"
         )
         
-        return np.array(combined_kpts), combined_desc, output_dim, np.array(orig_indices)
+        return np.array(combined_kpts), np.array(orig_indices)
 
 # ==================== Feature Combiner Factory ====================
 class FeatureCombinerFactory:
@@ -250,8 +196,8 @@ class FeatureCombinerFactory:
 class FeatureSaver(ABC):
     # Abstract base class for feature savers
     @abstractmethod
-    def save(self, view_id: str, kpts: np.ndarray, desc: np.ndarray, desc_dim: int):
-        # Save features to disk
+    def save(self, view_id: str, kpts: np.ndarray):
+        # Save features to disk (keypoints only)
         pass
 
 # ==================== Concrete Feature Saver ====================
@@ -263,32 +209,25 @@ class DSPSiftFeatureSaver(FeatureSaver):
         os.makedirs(output_dir, exist_ok=True)
         self.logger.log(f"Initialized DSP-SIFT saver with output directory: {output_dir}", "DEBUG")
     
-    def save(self, view_id: str, kpts: np.ndarray, desc: np.ndarray, desc_dim: int):
-        # Save features in DSP-SIFT format
+    def save(self, view_id: str, kpts: np.ndarray):
+        # Save features in DSP-SIFT format (keypoints only)
         if len(kpts) == 0:
             self.logger.log(f"No features to save for {view_id}", "WARNING")
             return
             
         save_start = time.time()
         try:
-            # Prepare file paths
+            # Prepare file path for keypoints
             feat_path = os.path.join(self.output_dir, f"{view_id}.dspsift.feat")
-            desc_path = os.path.join(self.output_dir, f"{view_id}.dspsift.desc")
             
             # Save keypoints
             with open(feat_path, 'w') as f:
                 for kpt in kpts:
                     f.write(f"{kpt[0]} {kpt[1]} {kpt[2]} {kpt[3]}\n")
             
-            # Save descriptors
-            with open(desc_path, 'wb') as f:
-                f.write(struct.pack('<I', len(kpts)))
-                f.write(struct.pack('<I', desc_dim))
-                f.write(desc.astype(np.uint8).tobytes())
-            
             save_time = time.time() - save_start
             self.logger.log(
-                f"Saved {len(kpts)} features (dim={desc_dim}) for {view_id} in {save_time:.3f}s", 
+                f"Saved {len(kpts)} features for {view_id} in {save_time:.3f}s", 
                 "DEBUG"
             )
             
@@ -557,8 +496,8 @@ class HybridFeatureCombiner:
             
             # Load features
             load_start = time.time()
-            orig_kpts, orig_desc, orig_dim = self.sift_loader.load(view_id)
-            super_kpts, super_desc, super_dim = self.superpoint_loader.load(view_id)
+            orig_kpts = self.sift_loader.load(view_id)
+            super_kpts = self.superpoint_loader.load(view_id)
             load_time = time.time() - load_start
             
             self.logger.log(f"Loaded {len(orig_kpts)} original and {len(super_kpts)} SuperPoint features for {view_id} in {load_time:.2f}s")
@@ -567,10 +506,7 @@ class HybridFeatureCombiner:
             
             # Combine features
             combine_start = time.time()
-            combined_kpts, combined_desc, combined_dim, orig_mapping = self.feature_combiner.combine(
-                (orig_kpts, orig_desc, orig_dim),
-                (super_kpts, super_desc, super_dim)
-            )
+            combined_kpts, orig_mapping = self.feature_combiner.combine(orig_kpts, super_kpts)
             combine_time = time.time() - combine_start
             
             self.logger.log(f"Combined to {len(combined_kpts)} features for {view_id} in {combine_time:.2f}s")
@@ -578,7 +514,7 @@ class HybridFeatureCombiner:
             
             # Save combined features
             save_start = time.time()
-            self.feature_saver.save(view_id, combined_kpts, combined_desc, combined_dim)
+            self.feature_saver.save(view_id, combined_kpts)
             save_time = time.time() - save_start
             self.logger.log(f"Saved combined features for {view_id} in {save_time:.2f}s")
             
