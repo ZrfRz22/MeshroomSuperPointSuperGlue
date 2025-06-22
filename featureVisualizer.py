@@ -6,6 +6,7 @@ import struct
 import argparse
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
+from PIL import Image
 
 # Imported Libraries
 import cv2
@@ -134,8 +135,9 @@ class MatchViewer:
         self.max_display_size = 800  # Max size for displaying images
 
         # Image orientation settings
-        self.rotate_ccw = True
+        self.rotate_ccw = False
         self.flip_vertical = False
+        self.raw_pixel_mode = True  # Force raw pixel mode
 
     # Get image file path from SfM JSON using view ID
     def _get_image_path(self, view_id: str) -> Optional[str]:
@@ -143,8 +145,7 @@ class MatchViewer:
             if view['viewId'] == view_id:
                 return view['path']
         return None
-    
-    # Load image from disk and optionally rotate/flip it
+
     def _load_image(self, view_id: str) -> Optional[np.ndarray]:
         if view_id in self.image_cache:
             return self.image_cache[view_id]
@@ -153,27 +154,33 @@ class MatchViewer:
         if not image_path:
             return None
         
-        img = cv2.imread(image_path)
-        if img is None:
-            return None
-        
-        # Save original dimensions before transformation
-        h, w = img.shape[:2]
-        self.original_dims[view_id] = (h, w)
-        
-        # Rotate image
-        if self.rotate_ccw:
-            img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        else:
-            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        try:
+            # Load image with PIL and disable EXIF orientation
+            pil_img = Image.open(image_path).copy()  # <- critical to avoid auto-rotation
+            img = np.array(pil_img)
 
-        # Optionally flip vertically
-        if self.flip_vertical:
-            img = cv2.flip(img, 0)
-        
-        self.image_cache[view_id] = img
-        return img
-    
+            # Convert RGB (PIL) to BGR (OpenCV) if needed
+            if len(img.shape) == 3 and img.shape[2] == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+            # Save original dimensions before transformation
+            h, w = img.shape[:2]
+            self.original_dims[view_id] = (h, w)
+
+            # Apply optional viewer transformations
+            if self.rotate_ccw:
+                img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+            if self.flip_vertical:
+                img = cv2.flip(img, 0)
+
+            self.image_cache[view_id] = img
+            return img
+
+        except Exception as e:
+            print(f"Error loading image {image_path}: {str(e)}")
+            return None
+
     # Load keypoints only (not descriptors)
     def _load_features(self, view_id: str) -> Optional[np.ndarray]:
         if view_id in self.feature_cache:

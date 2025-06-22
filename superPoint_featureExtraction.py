@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import List, Tuple
+from PIL import Image
 
 # Third-Party Libraries 
 import cv2
@@ -128,31 +129,50 @@ class DSPSiftSuperPointExtractor(FeatureExtractor):
         self.logger.log(f"Extracting features from {image_path}", "DEBUG")
 
         try:
-            # Load image as grayscale
-            image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-            if image is None:
-                raise ValueError(f"Failed to read image {image_path}")
+            # Load image using PIL (Python Imaging Library)
+            pil_img = Image.open(image_path)
+            
+            # Convert PIL image to NumPy array (raw pixel data)
+            image = np.array(pil_img)
+            
+            # Convert to grayscale if the image is in RGB (3 channels)
+            if len(image.shape) == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            # Raise error if image has more than 3 dimensions (e.g. 4D RGBA or others)
+            elif len(image.shape) > 3:
+                raise ValueError(f"Unexpected image shape: {image.shape}")
 
-            # Extract features using SuperPoint
+            # Disable gradient computation (inference mode)
             with torch.no_grad():
-                # Prepare input tensor
+                # Normalize image to range [0, 1], convert to tensor, add batch & channel dimensions
                 img_tensor = torch.from_numpy(image / 255.).float()[None, None].to(self.device)
+
+                # Pass the image through the SuperPoint model
                 output = self.model({'image': img_tensor})
 
-                # Convert keypoints from (y,x) to (x,y)
-                keypoints = output['keypoints'][0].cpu().numpy()[:, ::-1]  # swaps y,x → x,y
+                # Extract keypoints: convert from (y, x) to (x, y) if needed
+                keypoints = output['keypoints'][0].cpu().numpy()  # shape: (N, 2)
+
+                # Extract descriptors and transpose to (N, descriptor_dim)
                 descriptors = output['descriptors'][0].t().cpu().numpy()
+
+                # Extract confidence scores for each keypoint
                 scores = output['scores'][0].cpu().numpy()
 
-                # Normalize descriptors
+                # Normalize descriptors to unit length (L2 normalization)
                 descriptors = descriptors / (np.linalg.norm(descriptors, axis=1, keepdims=True) + 1e-8)
 
+            # Log successful feature extraction
             self.logger.log(f"Extracted {len(keypoints)} features from {image_path}", "INFO")
+            
+            # Return keypoints, descriptors, and scores
             return keypoints, descriptors.astype(np.float32), scores
 
         except Exception as e:
+            # Log any exception during feature extraction
             self.logger.log(f"Feature extraction failed for {image_path}: {str(e)}", "ERROR")
             raise
+
 
 # ==================== Feature Extractor Factory ====================
 class FeatureExtractorFactory:
@@ -175,14 +195,14 @@ class FeatureSaver(ABC):
 
     # Save features to disk
     @abstractmethod
-    def save(self, image_id: str, image_path: str, keypoints: np.ndarray,
+    def save(self, image_id: str, keypoints: np.ndarray,
              descriptors: np.ndarray, scores: np.ndarray) -> None:
         pass
 
 # ==================== Concrete Feature Saver ====================
 class DSPSiftFeatureSaver(FeatureSaver):
     # Saver for DSP-SIFT format features with additional .npz saving
-    def save(self, image_id: str, image_path: str, keypoints: np.ndarray,
+    def save(self, image_id: str, keypoints: np.ndarray,
          descriptors: np.ndarray, scores: np.ndarray) -> None:
         # Save features in .feat format (for DSP-SIFT) and a .npz archive
         save_start = time.time()
@@ -192,32 +212,20 @@ class DSPSiftFeatureSaver(FeatureSaver):
             desc_path = os.path.join(self.output_dir, f"{image_id}.dspsift.desc")
             npz_path = os.path.join(self.output_dir, f"{image_id}.features.npz")
 
-             # Load image to get dimensions
-            img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-            if img is None:
-                raise ValueError(f"Failed to read image {image_path}")
-            
-            image_width = img.shape[1]  # Get height for vertical flip
-            
-            # Flip coordinates VERTICALLY
-            flipped_keypoints = keypoints.copy()
-            if flipped_keypoints.size > 0:
-                flipped_keypoints[:, 1] = (image_width - 1) - keypoints[:, 1]  # Flip Y-coordinates
-
-            # Save FLIPPED coordinates to .feat file
+            # Save coordinates to .feat file
             with open(feat_path, 'w') as f:
-                for x, y in flipped_keypoints:
+                for x, y in keypoints:
                     f.write(f"{x} {y} 1.0 0.0\n")
 
-            # Save ORIGINAL descriptors to .desc file
+            # Save descriptors to .desc file
             with open(desc_path, 'wb') as f:
                 f.write(struct.pack('<I', keypoints.shape[0]))
                 f.write(struct.pack('<I', descriptors.shape[1]))
                 f.write(descriptors.tobytes())
 
-            # Save ORIGINAL data to .npz file
+            # Save data to .npz file
             np.savez_compressed(npz_path, 
-                            keypoints=keypoints,      # Original coordinates
+                            keypoints=keypoints,
                             descriptors=descriptors, 
                             scores=scores)
 
@@ -265,7 +273,7 @@ class SuperPointExtractionPipeline:
                 
                 # Extract and save features
                 keypoints, descriptors, scores = self.extractor.extract(image_path)
-                self.saver.save(image_id, image_path, keypoints, descriptors, scores)
+                self.saver.save(image_id, keypoints, descriptors, scores)
                 total_features += len(keypoints)
                 
             except Exception as e:
