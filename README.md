@@ -48,15 +48,10 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 
 ## Installation
 
-* **Download Meshroom (Windows Prebuilt Binary)**
+* **Download Meshroom 2023.3.0 (Windows Prebuilt Binary)**
 
   Get the latest release from the official Meshroom GitHub repository:
   [https://github.com/alicevision/meshroom/releases](https://github.com/alicevision/meshroom/releases)
-
-* **Download and Install Python 3.7**
-
-  From the official Python website:
-  [https://www.python.org/downloads/release/python-370/](https://www.python.org/downloads/release/python-370/)
 
 * **Download and Install Anaconda**
 
@@ -86,6 +81,7 @@ conda activate meshroom_env
 pip install numpy==1.21.6
 pip install opencv-python==4.11.0.86
 pip install torch==1.13.1
+pip install Pillow
 ```
 
 * **Navigate to Project Directory**
@@ -99,7 +95,7 @@ cd path/to/your/MeshroomSuperPointSuperGlue
 > Windows CMD / Anaconda Prompt:
 
 ```cmd
-xcopy /E /I MLPlugin "path\to\Meshroom\meshroom\nodes\MLPlugin"
+xcopy /E /I MLPlugin "path\to\Meshroom-2023.3.0\lib\meshroom\nodes\MLPlugin"
 ```
 
 * **Compile the Custom Executables Using PyInstaller**
@@ -108,7 +104,7 @@ xcopy /E /I MLPlugin "path\to\Meshroom\meshroom\nodes\MLPlugin"
 pyinstaller superPoint_featureExtraction.spec
 pyinstaller superGlue_featureMatching.spec
 pyinstaller hybridFeatureCombiner.spec
-pyinstaller featureVisualizer.spe
+pyinstaller featureVisualizer.spec
 ```
 
 * **Copy the Executables to Meshroom's AliceVision `bin` Folder**
@@ -116,9 +112,10 @@ pyinstaller featureVisualizer.spe
 > Windows CMD / Anaconda Prompt:
 
 ```cmd
-copy dist\superPoint_featureExtraction\superPoint_featureExtraction.exe "path\to\Meshroom\aliceVision\bin"
-copy dist\superGlue_featureMatching\superGlue_featureMatching.exe "path\to\Meshroom\aliceVision\bin"
-copy dist\hybridFeatureCombiner\hybridFeatureCombiner.exe "path\to\Meshroom\aliceVision\bin"
+copy dist\superPoint_featureExtraction.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
+copy dist\superGlue_featureMatching.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
+copy dist\hybridFeatureCombiner.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
+copy dist\featureVisualizer.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
 ```
 
 * **Launch Meshroom**
