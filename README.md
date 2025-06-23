@@ -82,6 +82,7 @@ pip install numpy==1.21.6
 pip install opencv-python==4.11.0.86
 pip install torch==1.13.1
 pip install Pillow
+pip install pyinstaller
 ```
 
 * **Navigate to Project Directory**
