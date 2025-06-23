@@ -123,7 +123,7 @@ copy dist\featureVisualizer.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
 
 ```bash
 cd path/to/Meshroom
-./Meshroom.exe
+.\Meshroom.exe
 ```
 
 ---
