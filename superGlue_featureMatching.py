@@ -277,15 +277,28 @@ class FeatureMatchingPipeline:
         self.logger.log(f"Processing rate: {total_pairs/total_time:.2f} pairs/second", "INFO")
 
     def _load_pairs(self) -> List[Tuple[str, str]]:
-        """Load unique ordered image pairs from the pairs file"""
-        pairs = set()
+        """Load ordered image pairs from the pairs file, maintaining first element order"""
+        pairs = []
         with open(self.config.pairs_file) as f:
             for line in f:
-                ids = line.strip().split()
-                # Create all pairwise combinations from the line (excluding self-pairs)
-                pairs.update(tuple(sorted((ids[i], ids[j]))) for i in range(len(ids)) for j in range(i+1, len(ids)))
-        self.logger.log(f"Loaded {len(pairs)} image pairs", "INFO")
-        return list(pairs)
+                # Skip empty lines and comments
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                    
+                ids = line.split()
+                if len(ids) < 2:
+                    continue
+                    
+                # First element is the reference image
+                ref_image = ids[0]
+                
+                # Create pairs with all subsequent images
+                for other_image in ids[1:]:
+                    pairs.append((ref_image, other_image))
+        
+        self.logger.log(f"Loaded {len(pairs)} ordered image pairs", "INFO")
+        return pairs
     
     def _process_pair(self, pair_idx: int, total_pairs: int, id0: str, id1: str, output_path: str) -> int:
         """Process a single image pair: load features, match with SuperGlue, filter with RANSAC"""

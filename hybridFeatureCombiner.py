@@ -111,7 +111,6 @@ class DSPSiftFeatureLoader(FeatureLoader):
 
                 # If descriptor dimension is missing or invalid, try to infer it
                 if desc_dim == 0:
-                    self.logger.log("Descriptor dimension missing or incorrect, attempting to infer it.", "WARNING")
                     data_bytes = file_size - 8  # exclude the 8 bytes already read
                     if data_bytes % num_features != 0:
                         raise ValueError("Cannot infer descriptor dimension: invalid file size.")
@@ -421,7 +420,7 @@ class MatchesCombiner:
     def combine(self, orig_matches: Dict[Tuple[str, str], List[Tuple[int, int]]], 
                 super_matches: Dict[Tuple[str, str], List[Tuple[int, int]]],
                 feature_mappings: Dict[str, Tuple[np.ndarray, np.ndarray]],
-                pair_to_file: Dict[Tuple[str, str], str]) -> Dict[str, Dict[Tuple[str, str], Set[Tuple[int, int]]]]:
+                pair_to_file: Dict[Tuple[str, str], str]) -> Dict[str, Dict[Tuple[str, str], List[Tuple[int, int]]]]:
         # Combine matches from original and SuperGlue sources
         self.logger.log("Starting match combination", "DEBUG")
         combine_start = time.time()
@@ -432,48 +431,62 @@ class MatchesCombiner:
         self.logger.log(f"Original matches: {sum(len(m) for m in orig_matches.values())} across {orig_pairs} pairs", "DEBUG")
         self.logger.log(f"SuperGlue matches: {sum(len(m) for m in super_matches.values())} across {super_pairs} pairs", "DEBUG")
         
-        # Map match files to pairs
-        file_to_pairs = defaultdict(list)
-        for pair in orig_matches.keys():
-            if pair in pair_to_file:
-                file_to_pairs[pair_to_file[pair]].append(pair)
-        
+        # First pass: Add all original matches to their respective files
         combined_results = defaultdict(dict)
-        total_combined_matches = 0
-        total_pairs = 0
         
-        # Process each match file and its pairs
-        for match_file, pairs in file_to_pairs.items():
-            for pair in pairs:
-                view_id0, view_id1 = pair
-                total_pairs += 1
+        # Process original matches first
+        for pair, matches in orig_matches.items():
+            if pair not in pair_to_file:
+                continue
                 
-                # Get original and SuperGlue matches
-                orig_pair_matches = orig_matches.get(pair, [])
-                super_pair_matches = super_matches.get(pair, [])
+            view_id0, view_id1 = pair
+            match_file = pair_to_file[pair]
+            
+            # Get feature index mappings
+            orig_mapping0, _ = feature_mappings.get(view_id0, (np.array([]), np.array([])))
+            orig_mapping1, _ = feature_mappings.get(view_id1, (np.array([]), np.array([])))
+            
+            # Add original matches
+            file_matches = []
+            for idx0, idx1 in matches:
+                if idx0 < len(orig_mapping0) and idx1 < len(orig_mapping1):
+                    new_idx0 = orig_mapping0[idx0]
+                    new_idx1 = orig_mapping1[idx1]
+                    file_matches.append((new_idx0, new_idx1))
+            
+            if file_matches:
+                combined_results[match_file][pair] = file_matches
+        
+        # Second pass: Append SuperGlue matches to existing pairs
+        for pair, matches in super_matches.items():
+            if pair not in pair_to_file:
+                continue
                 
-                # Get feature index mappings
-                orig_mapping0, super_mapping0 = feature_mappings.get(view_id0, (np.array([]), np.array([])))
-                orig_mapping1, super_mapping1 = feature_mappings.get(view_id1, (np.array([]), np.array([])))
-                
-                combined_matches = set()
-                
-                # Add original matches
-                for idx0, idx1 in orig_pair_matches:
-                    if idx0 < len(orig_mapping0) and idx1 < len(orig_mapping1):
-                        combined_matches.add((orig_mapping0[idx0], orig_mapping1[idx1]))
-                
-                # Add SuperGlue matches
-                for idx0, idx1 in super_pair_matches:
-                    if idx0 < len(super_mapping0) and idx1 < len(super_mapping1):
-                        combined_idx0 = super_mapping0[idx0]
-                        combined_idx1 = super_mapping1[idx1]
-                        combined_matches.add((combined_idx0, combined_idx1))
-                
-                # Store combined matches
-                if combined_matches:
-                    combined_results[match_file][pair] = combined_matches
-                    total_combined_matches += len(combined_matches)
+            view_id0, view_id1 = pair
+            match_file = pair_to_file[pair]
+            
+            # Get feature index mappings
+            _, super_mapping0 = feature_mappings.get(view_id0, (np.array([]), np.array([])))
+            _, super_mapping1 = feature_mappings.get(view_id1, (np.array([]), np.array([])))
+            
+            # Initialize pair if it doesn't exist
+            if pair not in combined_results[match_file]:
+                combined_results[match_file][pair] = []
+            
+            # Add SuperGlue matches
+            existing_matches = set(combined_results[match_file][pair])  # For deduplication
+            for idx0, idx1 in matches:
+                if idx0 < len(super_mapping0) and idx1 < len(super_mapping1):
+                    new_idx0 = super_mapping0[idx0]
+                    new_idx1 = super_mapping1[idx1]
+                    match_pair = (new_idx0, new_idx1)
+                    if match_pair not in existing_matches:
+                        combined_results[match_file][pair].append(match_pair)
+                        existing_matches.add(match_pair)
+        
+        # Calculate statistics
+        total_pairs = sum(len(pairs) for pairs in combined_results.values())
+        total_combined_matches = sum(len(m) for pairs in combined_results.values() for m in pairs.values())
         
         # Log total combined stats
         combine_time = time.time() - combine_start
