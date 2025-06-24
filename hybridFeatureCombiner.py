@@ -159,18 +159,18 @@ class FeatureCombiner(ABC):
 
 # ==================== Concrete Feature Combiner ====================
 class DSPSiftFeatureCombiner(FeatureCombiner):
-    # Combines DSP-SIFT features and removes duplicates
+    # Combines DSP-SIFT (128D) and SuperPoint (256D) features with padding
     def __init__(self, distance_threshold: float = 2.0):
-        self.distance_threshold = distance_threshold
+        self.distance_threshold = distance_threshold  # Not used but kept for compatibility
         self.logger = Logger()
     
     def combine(self, features1, features2):
-        # Combine features and remove duplicates based on distance
-        self.logger.log("Starting feature combination", "DEBUG")
+        # Combine features with padding for the 128D descriptors
+        self.logger.log("Starting feature combination with descriptor padding", "DEBUG")
 
-        # Unpack the original and SuperPoint features
-        orig_kpts, orig_desc, orig_dim = features1
-        super_kpts, super_desc, super_dim = features2
+        # Unpack the original (DSP-SIFT) and SuperPoint features
+        orig_kpts, orig_desc, orig_dim = features1  # orig_dim should be 128
+        super_kpts, super_desc, super_dim = features2  # super_dim should be 256
 
         # Log number of input features
         self.logger.log(f"Original features: {len(orig_kpts)} (dim={orig_dim})", "DEBUG")
@@ -184,70 +184,43 @@ class DSPSiftFeatureCombiner(FeatureCombiner):
             self.logger.log("No SuperPoint features, returning original features", "DEBUG")
             return orig_kpts, orig_desc, orig_dim, np.arange(len(orig_kpts))
 
-        # Initialize combined data structures
         combine_start = time.time()
-        combined_kpts = []
-        combined_desc = []
-        index_mapping = []
-        duplicates_found = 0
-
-        # Start with original features
-        combined_kpts.extend(orig_kpts)
-        combined_desc.extend(orig_desc)
-        orig_indices = list(range(len(orig_kpts)))
-
-        # Check each SuperPoint keypoint for duplicates
-        for i, (super_kpt, super_d) in enumerate(zip(super_kpts, super_desc)):
-            duplicate = False
-            super_xy = super_kpt[:2]  # x, y location of SuperPoint keypoint
-
-            for j, orig_kpt in enumerate(orig_kpts):
-                orig_xy = orig_kpt[:2]  # x, y of original keypoint
-                # Check distance between keypoints
-                if np.linalg.norm(super_xy - orig_xy) < self.distance_threshold:
-                    duplicate = True
-                    duplicates_found += 1
-                    # Replace with SuperPoint keypoint if it has larger scale
-                    if super_kpt[2] > orig_kpt[2]:
-                        combined_kpts[j] = super_kpt
-                        combined_desc[j] = super_d
-                    break
-
-            # If not duplicate, add new keypoint and descriptor
-            if not duplicate:
-                combined_kpts.append(super_kpt)
-                combined_desc.append(super_d)
-                orig_indices.append(len(orig_kpts) + i)
-
-        # Use the larger descriptor dimension between the two sources
-        output_dim = max(orig_dim, super_dim)
-
-        # Pad descriptors to the same size if needed
-        if orig_dim != super_dim:
-            self.logger.log(f"Padding descriptors from {orig_dim}/{super_dim} to {output_dim}", "DEBUG")
-            padded_desc = []
-            for desc in combined_desc:
-                dim = len(desc)
-                if dim < output_dim:
-                    padded = np.zeros(output_dim, dtype=np.uint8)
-                    padded[:dim] = desc  # zero-pad shorter descriptor
-                    padded_desc.append(padded)
-                else:
-                    padded_desc.append(desc)
-            combined_desc = np.array(padded_desc)
+        
+        # Combine keypoints by simple concatenation
+        combined_kpts = np.concatenate([orig_kpts, super_kpts])
+        
+        # Process descriptors - pad DSP-SIFT (128D) to match SuperPoint (256D)
+        if orig_dim == 128 and super_dim == 256:
+            self.logger.log("Padding 128D DSP-SIFT descriptors to 256D", "DEBUG")
+            
+            # Pad original descriptors (128D -> 256D) with zeros
+            padded_orig_desc = np.zeros((len(orig_desc), 256), dtype=np.uint8)
+            padded_orig_desc[:, :128] = orig_desc  # Copy original 128 dimensions
+            
+            # Combine with SuperPoint descriptors (already 256D)
+            combined_desc = np.concatenate([padded_orig_desc, super_desc])
+            output_dim = 256
         else:
-            combined_desc = np.array(combined_desc)
+            # Fallback behavior if dimensions aren't as expected
+            self.logger.log(f"Unexpected descriptor dimensions - original: {orig_dim}, super: {super_dim}", "WARNING")
+            combined_desc = np.concatenate([orig_desc, super_desc])
+            output_dim = max(orig_dim, super_dim)
+        
+        # Create index mapping (original indices stay the same, SuperPoint indices get offset)
+        orig_mapping = np.concatenate([
+            np.arange(len(orig_kpts)),  # Original features keep their indices
+            np.arange(len(orig_kpts), len(orig_kpts) + len(super_kpts))  # SuperPoint features get new indices
+        ])
 
         # Log the results of the combination process
         combine_time = time.time() - combine_start
         self.logger.log(
             f"Combined {len(orig_kpts)} + {len(super_kpts)} => {len(combined_kpts)} features "
-            f"(duplicates: {duplicates_found}) in {combine_time:.3f}s", 
+            f"(output dim={output_dim}) in {combine_time:.3f}s", 
             "DEBUG"
         )
 
-        # Return the combined keypoints, descriptors, output dim, and index mapping
-        return np.array(combined_kpts), combined_desc, output_dim, np.array(orig_indices)
+        return combined_kpts, combined_desc, output_dim, orig_mapping
 
 
 # ==================== Feature Combiner Factory ====================
@@ -413,7 +386,7 @@ class MatchesLoader:
 
 # ==================== Matches Combiner ====================
 class MatchesCombiner:
-    # Combiner for matches from different sources
+    # Combiner for matches from different sources without deduplication
     def __init__(self):
         self.logger = Logger()
     
@@ -421,8 +394,8 @@ class MatchesCombiner:
                 super_matches: Dict[Tuple[str, str], List[Tuple[int, int]]],
                 feature_mappings: Dict[str, Tuple[np.ndarray, np.ndarray]],
                 pair_to_file: Dict[Tuple[str, str], str]) -> Dict[str, Dict[Tuple[str, str], List[Tuple[int, int]]]]:
-        # Combine matches from original and SuperGlue sources
-        self.logger.log("Starting match combination", "DEBUG")
+        # Combine matches from original and SuperGlue sources without deduplication
+        self.logger.log("Starting match combination (no deduplication)", "DEBUG")
         combine_start = time.time()
         
         # Log number of matches and pairs
@@ -474,15 +447,11 @@ class MatchesCombiner:
                 combined_results[match_file][pair] = []
             
             # Add SuperGlue matches
-            existing_matches = set(combined_results[match_file][pair])  # For deduplication
             for idx0, idx1 in matches:
                 if idx0 < len(super_mapping0) and idx1 < len(super_mapping1):
                     new_idx0 = super_mapping0[idx0]
                     new_idx1 = super_mapping1[idx1]
-                    match_pair = (new_idx0, new_idx1)
-                    if match_pair not in existing_matches:
-                        combined_results[match_file][pair].append(match_pair)
-                        existing_matches.add(match_pair)
+                    combined_results[match_file][pair].append((new_idx0, new_idx1))
         
         # Calculate statistics
         total_pairs = sum(len(pairs) for pairs in combined_results.values())
