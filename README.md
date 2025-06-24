@@ -46,6 +46,12 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 
 ---
 
+## Video Demo and Tutorial
+
+[![Watch the video](https://img.youtube.com/vi/3mHiARhuAfI/hqdefault.jpg)](https://www.youtube.com/watch?v=3mHiARhuAfI)
+
+---
+
 ## Installation
 
 * **Download Meshroom 2023.3.0 (Windows Prebuilt Binary)**
