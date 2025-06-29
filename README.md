@@ -46,42 +46,54 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 
 ---
 
-## Video Demo and Tutorial
+## Installation Script
 
-[![Watch the video](https://img.youtube.com/vi/3mHiARhuAfI/hqdefault.jpg)](https://www.youtube.com/watch?v=3mHiARhuAfI)
+[➡️ Click here to download the installation script](Install-MeshroomPlugin.ps1)
+
+After downloading, right-click the file and select “Run with PowerShell” (make sure to run it as Administrator).
+Alternatively, open PowerShell as Administrator and run:
+
+```powershell
+.\Install-MeshroomPlugin.ps1
+```
 
 ---
 
-## Installation
+## Manual Installation
+If the previously mentioned installation script successfuly installed Meshroom and the plugin, please skip to the "Usage" section, but in the case, that the installation file fails to build the plugin or the installation takes too long, you can follow this manual installation guide as an alternative. 
 
-* **Download Meshroom 2023.3.0 (Windows Prebuilt Binary)**
+A YouTube video tutorial for manual installation is also provided below for additional clarity.
+
+[![Watch the video](https://img.youtube.com/vi/3mHiARhuAfI/hqdefault.jpg)](https://www.youtube.com/watch?v=3mHiARhuAfI)
+
+**Download Meshroom 2023.3.0 (Windows Prebuilt Binary)**
 
   Get the latest release from the official Meshroom GitHub repository:
   [https://github.com/alicevision/meshroom/releases](https://github.com/alicevision/meshroom/releases)
 
-* **Download and Install Anaconda**
+**Download and Install Anaconda**
 
   From the official Anaconda website:
   [https://www.anaconda.com/products/distribution](https://www.anaconda.com/products/distribution)
 
-* **Access Command Prompt**
+**Access Command Prompt**
 
   After installation, open the Anaconda Command Prompt.
 
-* **Clone the GitHub Repository**
+**Clone the GitHub Repository**
 
 ```bash
 git clone https://github.com/ZrfRz22/MeshroomSuperPointSuperGlue.git
 ```
   
-* **Create and Activate Conda Environment with Python 3.7**
+**Create and Activate Conda Environment with Python 3.7**
 
 ```bash
 conda create -n meshroom_env python=3.7
 conda activate meshroom_env
 ```
 
-* **Install Python Dependencies**
+**Install Python Dependencies**
 
 ```bash
 pip install numpy==1.21.6
@@ -91,13 +103,13 @@ pip install Pillow
 pip install pyinstaller
 ```
 
-* **Navigate to Project Directory**
+**Navigate to Project Directory**
 
 ```bash
 cd path/to/your/MeshroomSuperPointSuperGlue
 ```
 
-* **Copy `MLPlugin` Folder into Meshroom Nodes Folder**
+**Copy `MLPlugin` Folder into Meshroom Nodes Folder**
 
 > Windows CMD / Anaconda Prompt:
 
@@ -105,13 +117,13 @@ cd path/to/your/MeshroomSuperPointSuperGlue
 xcopy /E /I MLPlugin "path\to\Meshroom-2023.3.0\lib\meshroom\nodes\MLPlugin"
 ```
 
-* **Copy the pre-saved pipeline into Meshroom Pipelines Folder**
+**Copy the pre-saved pipeline into Meshroom Pipelines Folder**
 
 ```bash
 copy hybridPhotogrammetry.mg "path\to\Meshroom-2023.3.0\lib\meshroom\pipelines"
 ```
 
-* **Compile the Custom Executables Using PyInstaller**
+**Compile the Custom Executables Using PyInstaller**
 
 ```bash
 pyinstaller superPoint_featureExtraction.spec
@@ -120,7 +132,7 @@ pyinstaller hybridFeatureCombiner.spec
 pyinstaller featureVisualizer.spec
 ```
 
-* **Copy the Executables to Meshroom's AliceVision `bin` Folder**
+**Copy the Executables to Meshroom's AliceVision `bin` Folder**
 
 > Windows CMD / Anaconda Prompt:
 
@@ -131,7 +143,7 @@ copy dist\hybridFeatureCombiner.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
 copy dist\featureVisualizer.exe "path\to\Meshroom-2023.3.0\aliceVision\bin"
 ```
 
-* **Launch Meshroom**
+**Launch Meshroom**
 
 ```bash
 cd path/to/Meshroom
@@ -146,60 +158,29 @@ cd path/to/Meshroom
 Once Meshroom is launched, you will be greeted with the main user interface.
 ![image](https://github.com/user-attachments/assets/a3831c87-d4bd-4f8b-8922-24abb9671533)
 
-Navigate to the workspace panel at the bottom of the screen.
-![image](https://github.com/user-attachments/assets/819f7408-476d-4756-a683-9a3d81f96229)
+To set up the pipeline, click on the `File` menu at the top → `New Pipeline` → select `Hybrid Photogrammetry`
+![image](https://github.com/user-attachments/assets/08b144ec-accd-4a5e-b713-c0c8b939f81c)
 
-Right-click anywhere in the workspace and hover over the `MLPlugin` category
-
-You will find the three main custom nodes:
-   * `SuperPointFeatureExtraction`
-   * `SuperGlueFeatureMatching`
-   * `HybridFeatureCombiner`
-
-![image](https://github.com/user-attachments/assets/8a451984-dc06-4f17-bdb5-44e74af30773)
-   
-Add all three nodes to the workspace:
-![image](https://github.com/user-attachments/assets/47474b9e-a34b-4c1b-8b55-ebd6f5200856)
-
-Duplicate the default `ImageMatching` node to create a second one:
-
-![image](https://github.com/user-attachments/assets/57f36ca1-a8f3-43bd-b966-7d66070f048f)
- 
- ---
- 
-### Node Arrangement
-Once all the nodes have been added, arrange the nodes like so:
-![image](https://github.com/user-attachments/assets/72286f9a-1931-4709-8ef2-94ee52865929)
-
-Remove all the connections between the Feature Matching node and the Structure from Motion node by right clicking on a connection selecting `Remove`
-![image](https://github.com/user-attachments/assets/ca16b5ed-73a8-4323-b81d-5129a0b3b7d6)
-
-Then, connect the nodes in the following layout (The Describer Types can be found by clicking the dropdown button at the bottom of a node to reveal more parameters). Make sure all node connections flow left to right as Meshroom determines the pipeline execution order based on this direction:
-![image](https://github.com/user-attachments/assets/9f7fabb0-a5b9-4674-b816-7aa4583e5d90)
-
-Clicking the dropdown button again after making the connections is recommended as to not make the workspace too cluttered, as seen here:
-![image](https://github.com/user-attachments/assets/e884a848-67e3-4d61-b319-8c6c6225128c)
-
-Click on the `File` menu at the top → `Save as` to Save the pipeline
-
-![image](https://github.com/user-attachments/assets/844db156-bfdc-48b9-86f5-f074ce2ba24d)
+Once clicked, the hybrid pipeline will appear in the workspace
+![image](https://github.com/user-attachments/assets/6683fff7-7125-41f8-a919-780d965c71c9)
 
 ---
 
 ###  Execution
 Click on the `File` menu at the top → `Import Images` → Select your image folder to import your images.
-
-![image](https://github.com/user-attachments/assets/179d4e90-7fe3-4e53-bc74-3a18bc17d361)
+![image](https://github.com/user-attachments/assets/0bd5c0f6-b1b6-43f3-8ba9-dfe8de54101d)
 
 Your imported images will be displayed on your dashboard.
-![image](https://github.com/user-attachments/assets/cd8e8f13-677f-4024-8568-f18a05f1957f)
+![image](https://github.com/user-attachments/assets/2720f69a-976c-4f24-b4c8-bc9082625c43)
 
 Click the `Start` button on the top toolbar.
-
-![image](https://github.com/user-attachments/assets/0e36dd60-914c-4693-8273-c358e3f251bc)
+![image](https://github.com/user-attachments/assets/7e3d4bb1-2a7b-4175-bcb1-150aa2a83e15)
 
 The pipeline will begin execution automatically.
-![image](https://github.com/user-attachments/assets/535c5d49-aa49-4256-8a05-2ce0e650e464)
+![image](https://github.com/user-attachments/assets/66bf062a-80cf-4eb5-8eb0-35b3695b089f)
+
+When execution successfuly completes, the dashboard will look like this
+![image](https://github.com/user-attachments/assets/3a72979a-b86f-46bb-8779-e9a737a04fc7)
 
 ---
 
@@ -238,22 +219,20 @@ The Feature Visualizer is an optional node in the ML Plugin category that allows
 
 **How to Use**
 
-1.Navigate to the*workspace section at the bottom, and Right-click in the workspace, go to ML Plugin and select Feature Visualizer
+1. Navigate to the workspace section at the bottom, and Right-click in the workspace, go to ML Plugin and select Feature Visualizer
+![image](https://github.com/user-attachments/assets/9f8b9934-d56b-427b-8a95-a70678f4d944)
 
-![image](https://github.com/user-attachments/assets/74a47950-b060-4956-af74-34f27efde436)
-
-2. Add it to the workspace, and connect it to any of the macther nodes:
- 
+2. Add it to the workspace, and connect it to any of the matcher nodes:
 ![image](https://github.com/user-attachments/assets/57cc8530-adae-49e2-a12e-a5411188e313)
 
 3. Press the "Start" button at the top, and 2 windows should pop up, one for the first image and one for the other
    - Use the "Up" and "Down" arrow keys to cycle through each keypoint pair (Highlighted in red)
    - Use the "Left" and "Right" arrow keys to cycle between image pairs
    - All keypoints of an image are also displayed (coloured in green)
-   - Press "r" to toggle between counter-clockwise and clockwise image rotation (In case of key point and image misalignment)
-   - Press "f" to flip the image vertcially (In case of key point and image misalignment)
+   - The matched keypoints of an image pair are also displayed (highlighted in red)
+   - Press "a" to toggle between showing all keypoints and showing only matched keypoints
 
-![image](https://github.com/user-attachments/assets/21c3c9c9-0d66-4fb9-ac18-17e3f95ba706)
+![image](https://github.com/user-attachments/assets/7fad659c-0961-4c58-9f45-cef590dbd94b)
 
 ---
 
@@ -272,24 +251,14 @@ It should be made clear that these limitations stem from Meshroom itself and are
 
 ### Recommendations
 
-To ensure consistent results and avoid unpredictable behavior:
-
-1. Set up the ML hybrid pipeline with all necessary nodes and connections.
-2. Select all the nodes in the pipeline and copy them.
-3. Then, click `File > New > Photogrammetry Pipeline` to create a new project.
-4. You will be given the generic photogrammetry pipeline.
-5. Paste the copied ML pipeline into the new workspace.
-6. Delete the provided generic pipeline.
-7. Recheck the connections of the pasted ML hybrid pipeline.
-8. Conduct reconstruction.
-
-This help provide a fresh and reliable environment for each new project session.
+To ensure consistent results and avoid unpredictable behavior, ensure to start a new Hybrid Photogrammetry before executing every reconstruction to ensure inconsistent image file paths and configuration parameters between nodes, providing a fresh and reliable environment for each new project session.
+![image](https://github.com/user-attachments/assets/08b144ec-accd-4a5e-b713-c0c8b939f81c)
 
 ---
 
 ## Example Screenshots
 
-Execution in Porgress
+Execution in Progress
 ![image](https://github.com/user-attachments/assets/b8272557-edff-446c-a63e-b4fa17bef728)
 
 Failed or Halted Execution
