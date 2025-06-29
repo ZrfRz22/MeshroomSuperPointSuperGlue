@@ -46,12 +46,6 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 
 ---
 
-## Video Demo and Tutorial
-
-
-
----
-
 ## Installation Script
 
 [➡️ Click here to download the installation script](Install-MeshroomPlugin.ps1)
