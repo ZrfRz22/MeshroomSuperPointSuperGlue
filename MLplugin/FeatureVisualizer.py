@@ -1,7 +1,7 @@
 from meshroom.core import desc
 
 class FeatureVisualizer(desc.CommandLineNode):
-    # # Command line template for executing the Feature Visualizer tool
+    # Command line template for executing the Feature Visualizer tool
     commandLine = (
         'featureVisualizer '
         '--inputSfM {inputSfMValue} '

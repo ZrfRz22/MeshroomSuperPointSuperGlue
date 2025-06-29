@@ -51,7 +51,7 @@ class Logger:
 
 # ==================== Abstract Feature Loader ====================
 class FeatureLoader(ABC):
-    # Must be implemented by all feature loader classes
+    # Abstract base class to feature loaders
     @abstractmethod
     def load(self, view_id: str) -> Tuple[np.ndarray, np.ndarray, int]:
         # Load features for a given image/view ID
@@ -59,7 +59,7 @@ class FeatureLoader(ABC):
 
 # ==================== Concrete Feature Loader ====================
 class DSPSiftFeatureLoader(FeatureLoader):
-    # Loads DSP-SIFT features from files
+    # Loads features stored in the DSP-SIFT format
 
     def __init__(self, features_dir: str):
         # Set the directory containing feature files
@@ -133,11 +133,9 @@ class DSPSiftFeatureLoader(FeatureLoader):
         # Return keypoints, descriptors, and descriptor dimension
         return np.array(kpts), np.array(desc), desc_dim
 
-
-
 # ==================== Feature Loader Factory ====================
 class FeatureLoaderFactory:
-    # Returns the correct loader based on the given type
+    # Factory for creating feature loaders based on descriptor type
 
     @staticmethod
     def create_loader(loader_type: str, features_dir: str) -> FeatureLoader:
@@ -147,10 +145,9 @@ class FeatureLoaderFactory:
         # Raise error if loader type is unknown
         raise ValueError(f"Unknown loader type: {loader_type}")
 
-
 # ==================== Abstract Feature Combiner ====================
 class FeatureCombiner(ABC):
-    # Base class for feature combiners
+    # Abstract base class for feature combiners
     @abstractmethod
     def combine(self, features1: Tuple[np.ndarray, np.ndarray, int], 
                 features2: Tuple[np.ndarray, np.ndarray, int]) -> Tuple[np.ndarray, np.ndarray, int, np.ndarray]:
@@ -159,13 +156,13 @@ class FeatureCombiner(ABC):
 
 # ==================== Concrete Feature Combiner ====================
 class DSPSiftFeatureCombiner(FeatureCombiner):
-    # Combines DSP-SIFT (128D) and SuperPoint (256D) features with padding
+    # Combines SIFT (128D) and SuperPoint (256D) features that are stored in the DSP-SIFT format
     def __init__(self, distance_threshold: float = 2.0):
         self.distance_threshold = distance_threshold  # Not used but kept for compatibility
         self.logger = Logger()
     
+    # Combine features with padding for the 128D descriptors
     def combine(self, features1, features2):
-        # Combine features with padding for the 128D descriptors
         self.logger.log("Starting feature combination with descriptor padding", "DEBUG")
 
         # Unpack the original (DSP-SIFT) and SuperPoint features
@@ -189,7 +186,7 @@ class DSPSiftFeatureCombiner(FeatureCombiner):
         # Combine keypoints by simple concatenation
         combined_kpts = np.concatenate([orig_kpts, super_kpts])
         
-        # Process descriptors - pad DSP-SIFT (128D) to match SuperPoint (256D)
+        # Pad DSP-SIFT (128D) to match SuperPoint (256D)
         if orig_dim == 128 and super_dim == 256:
             self.logger.log("Padding 128D DSP-SIFT descriptors to 256D", "DEBUG")
             
@@ -239,7 +236,6 @@ class FeatureSaver(ABC):
     # Abstract base class for feature savers
     @abstractmethod
     def save(self, view_id: str, kpts: np.ndarray, desc: np.ndarray, desc_dim: int):
-        # Save features to disk
         pass
 
 # ==================== Concrete Feature Saver ====================
@@ -472,8 +468,8 @@ class MatchesSaver:
     def __init__(self):
         self.logger = Logger()
     
+    # Save combined matches to output folder
     def save(self, combined_results: Dict[str, Dict[Tuple[str, str], Set[Tuple[int, int]]]], output_dir: str):
-        # Save combined matches to disk
         self.logger.log(f"Saving combined matches to {output_dir}", "DEBUG")
         save_start = time.time()
         total_files = 0
@@ -497,9 +493,9 @@ class MatchesSaver:
                         total_matches += len(matches)
                         
                         # Write view pair info and number of matches
-                        f.write(f"{view_id0} {view_id1}\n")
-                        f.write("1\n")
-                        f.write(f"dspsift {len(matches)}\n")
+                        f.write(f"{view_id0} {view_id1}\n")     # Image 1 ID, Image 2 ID
+                        f.write("1\n")                          # Describer type format ID
+                        f.write(f"dspsift {len(matches)}\n")    # matches
                         for idx0, idx1 in matches:
                             f.write(f"{idx0} {idx1}\n")
 
@@ -556,12 +552,13 @@ class HybridFeatureCombiner:
         for i, view_id in enumerate(views):
             self.logger.progress(i+1, len(views), f"Combining features for view {view_id}")
             
-            # Load features
+            # Load the original and SuperPoint features
             load_start = time.time()
             orig_kpts, orig_desc, orig_dim = self.sift_loader.load(view_id)
             super_kpts, super_desc, super_dim = self.superpoint_loader.load(view_id)
-            load_time = time.time() - load_start
             
+            # Log feature loading activities
+            load_time = time.time() - load_start
             self.logger.log(f"Loaded {len(orig_kpts)} original and {len(super_kpts)} SuperPoint features for {view_id} in {load_time:.2f}s")
             total_original_features += len(orig_kpts)
             total_super_features += len(super_kpts)
@@ -583,7 +580,7 @@ class HybridFeatureCombiner:
             save_time = time.time() - save_start
             self.logger.log(f"Saved combined features for {view_id} in {save_time:.2f}s")
             
-            # Map SuperPoint features to combined indices
+            # Map SuperPoint features to the new combined indices
             super_mapping = []
             for i in range(len(super_kpts)):
                 if i < len(orig_mapping) - len(orig_kpts):
@@ -597,7 +594,7 @@ class HybridFeatureCombiner:
             
             feature_mappings[view_id] = (orig_mapping, np.array(super_mapping))
         
-        # Log feature stats
+        # Log feature statistics
         self.logger.log("\n=== Feature Combination Statistics ===")
         self.logger.log(f"Total original features: {total_original_features}")
         self.logger.log(f"Total SuperPoint features: {total_super_features}")
@@ -605,7 +602,7 @@ class HybridFeatureCombiner:
         self.logger.log(f"Feature reduction: {(total_original_features + total_super_features - total_combined_features) / (total_original_features + total_super_features) * 100:.1f}%")
         self.logger.log("Feature combination complete")
         
-        # Load and combine matches
+        # Load original and SuperGlue matches
         self.logger.log("\nStarting match combination")
         match_load_start = time.time()
         orig_matches, pair_to_file = self.matches_loader.load(self.config.input_matches_dir)
@@ -621,7 +618,7 @@ class HybridFeatureCombiner:
         )
         combine_time = time.time() - combine_start
         
-        # Match statistics
+        # Log match statistics
         total_orig_matches = sum(len(m) for m in orig_matches.values())
         total_super_matches = sum(len(m) for m in super_matches.values())
         total_combined_matches = sum(len(m) for pairs in combined_results.values() for m in pairs.values())
@@ -632,13 +629,13 @@ class HybridFeatureCombiner:
         self.logger.log(f"Total combined matches: {total_combined_matches}")
         self.logger.log(f"Match combination completed in {combine_time:.2f}s")
         
-        # Save matches
+        # Save combined matches
         save_start = time.time()
         self.matches_saver.save(combined_results, self.config.output_matches_dir)
         save_time = time.time() - save_start
         self.logger.log(f"Saved combined matches in {save_time:.2f}s")
         
-        # Final log
+        # Final statistics log
         total_time = time.time() - start_time
         self.logger.log("\n=== Hybrid Combination Complete ===")
         self.logger.log(f"Total processing time: {total_time:.2f} seconds")
@@ -647,9 +644,7 @@ class HybridFeatureCombiner:
 
 # ==================== Main ====================
 def main():
-    """Main entry point for the hybrid feature combiner"""
-    
-    # Parse command line arguments
+    # Retrieves input and parameters from the Hybrid Feature Combiner frontend
     parser = argparse.ArgumentParser(description='Combine features and matches from SIFT and SuperPoint/SuperGlue')
     parser.add_argument('--inputSfM', required=True, help='Input SfMData file')
     parser.add_argument('--inputFeatures', required=True, help='Original feature directory')
@@ -659,11 +654,10 @@ def main():
     parser.add_argument('--outputFeatures', required=True, help='Output directory for combined features')
     parser.add_argument('--outputMatches', required=True, help='Output directory for combined matches')
     parser.add_argument('--describerTypes', default='dspsift', help='Feature type')
-    
-    # Get arguments from parser
+
     args = parser.parse_args()
     
-    # Create configuration object with provided arguments
+    # Prepare configurations for the Hybrid Feature Combiner model
     config = HybridCombinerConfig(
         input_sfm=args.inputSfM,
         input_features_dir=args.inputFeatures,
@@ -675,12 +669,11 @@ def main():
         describer_types=args.describerTypes
     )
     
-    # Create the hybrid combiner with the config
+    # Create the hybrid combiner with the config class
     combiner = HybridFeatureCombiner(config)
     
     # Run the hybrid combination pipeline
     combiner.run()
 
-# Run main if this script is executed
 if __name__ == "__main__":
     main()

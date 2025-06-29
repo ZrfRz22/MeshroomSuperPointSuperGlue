@@ -57,12 +57,13 @@ class Logger:
             cls._instance.start_time = time.time()  # Initialize start time
         return cls._instance
 
-    # Log a message with timestamp and elapsed time
+    # Log a message with type, timestamp and elapsed time
     def log(self, message: str, level: str = "INFO"):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         elapsed = timedelta(seconds=time.time() - self.start_time)
         log_entry = f"[{level}][{timestamp}][{elapsed}] {message}"
 
+        # Print the logs real-time in the Meshroom UI
         if level == "ERROR":
             print(log_entry, file=sys.stderr)
         else:
@@ -81,7 +82,7 @@ class SFMParser:
     def __init__(self, logger: Logger):
         self.logger = logger
 
-    # Parse an SfM file to extract view information
+    # Parse an SfM file to extract the view ID and image paths
     def parse(self, sfm_path: str) -> List[Tuple[str, str]]:
         self.logger.log(f"Parsing SFM file: {sfm_path}", "DEBUG")
         try:
@@ -99,7 +100,7 @@ class SFMParser:
 
 # ==================== Abstract Feature Extractor ====================
 class FeatureExtractor(ABC):
-    # Extract features from an image
+    # Abstract base class to extract features from an image
     @abstractmethod
     def extract(self, image_path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         pass
@@ -129,20 +130,16 @@ class DSPSiftSuperPointExtractor(FeatureExtractor):
         self.logger.log(f"Extracting features from {image_path}", "DEBUG")
 
         try:
-            # Load image using PIL (Python Imaging Library)
+            # Load image's raw pixel data using PIL
             pil_img = Image.open(image_path)
-            
-            # Convert PIL image to NumPy array (raw pixel data)
             image = np.array(pil_img)
             
-            # Convert to grayscale if the image is in RGB (3 channels)
+            # Convert image to grayscale 
             if len(image.shape) == 3:
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            # Raise error if image has more than 3 dimensions (e.g. 4D RGBA or others)
             elif len(image.shape) > 3:
                 raise ValueError(f"Unexpected image shape: {image.shape}")
 
-            # Disable gradient computation (inference mode)
             with torch.no_grad():
                 # Normalize image to range [0, 1], convert to tensor, add batch & channel dimensions
                 img_tensor = torch.from_numpy(image / 255.).float()[None, None].to(self.device)
@@ -150,29 +147,22 @@ class DSPSiftSuperPointExtractor(FeatureExtractor):
                 # Pass the image through the SuperPoint model
                 output = self.model({'image': img_tensor})
 
-                # Extract keypoints: convert from (y, x) to (x, y) if needed
-                keypoints = output['keypoints'][0].cpu().numpy()  # shape: (N, 2)
-
-                # Extract descriptors and transpose to (N, descriptor_dim)
+                # Extract keypoints, descriptors and confidence scores of each feature
+                keypoints = output['keypoints'][0].cpu().numpy()
                 descriptors = output['descriptors'][0].t().cpu().numpy()
-
-                # Extract confidence scores for each keypoint
                 scores = output['scores'][0].cpu().numpy()
 
                 # Normalize descriptors to unit length (L2 normalization)
                 descriptors = descriptors / (np.linalg.norm(descriptors, axis=1, keepdims=True) + 1e-8)
 
-            # Log successful feature extraction
-            self.logger.log(f"Extracted {len(keypoints)} features from {image_path}", "INFO")
-            
             # Return keypoints, descriptors, and scores
+            self.logger.log(f"Extracted {len(keypoints)} features from {image_path}", "INFO")
             return keypoints, descriptors.astype(np.float32), scores
 
         except Exception as e:
             # Log any exception during feature extraction
             self.logger.log(f"Feature extraction failed for {image_path}: {str(e)}", "ERROR")
             raise
-
 
 # ==================== Feature Extractor Factory ====================
 class FeatureExtractorFactory:
@@ -183,17 +173,16 @@ class FeatureExtractorFactory:
             return DSPSiftSuperPointExtractor(config, logger)
         raise ValueError(f"Unsupported extractor type: {extractor_type}")
 
-
 # ==================== Abstract Feature Saver ====================
 class FeatureSaver(ABC):
-    # Abstract base class for feature savers
+    # Abstract base class to save features
     def __init__(self, output_dir: str, logger: Logger):
         self.output_dir = output_dir
         self.logger = logger
         os.makedirs(output_dir, exist_ok=True)
         self.logger.log(f"Initialized feature saver with output directory: {output_dir}", "DEBUG")
 
-    # Save features to disk
+    # Abstract method to save features
     @abstractmethod
     def save(self, image_id: str, keypoints: np.ndarray,
              descriptors: np.ndarray, scores: np.ndarray) -> None:
@@ -201,10 +190,10 @@ class FeatureSaver(ABC):
 
 # ==================== Concrete Feature Saver ====================
 class DSPSiftFeatureSaver(FeatureSaver):
-    # Saver for DSP-SIFT format features with additional .npz saving
+    # Saves features in DSP-SIFT format for Meshroom compatiblity (.feat and .desc)
+    # Also saves features for SuperGlue compatilbility (.npz)
     def save(self, image_id: str, keypoints: np.ndarray,
          descriptors: np.ndarray, scores: np.ndarray) -> None:
-        # Save features in .feat format (for DSP-SIFT) and a .npz archive
         save_start = time.time()
         try:
             # Define output file paths
@@ -212,18 +201,18 @@ class DSPSiftFeatureSaver(FeatureSaver):
             desc_path = os.path.join(self.output_dir, f"{image_id}.dspsift.desc")
             npz_path = os.path.join(self.output_dir, f"{image_id}.features.npz")
 
-            # Save coordinates to .feat file
+            # Save coordinates to .feat file (For Meshroom compatibility)
             with open(feat_path, 'w') as f:
                 for x, y in keypoints:
                     f.write(f"{x} {y} 1.0 0.0\n")
 
-            # Save descriptors to .desc file
+            # Save descriptors to .desc file (For Meshroom compatibility)
             with open(desc_path, 'wb') as f:
                 f.write(struct.pack('<I', keypoints.shape[0]))
                 f.write(struct.pack('<I', descriptors.shape[1]))
                 f.write(descriptors.tobytes())
 
-            # Save data to .npz file
+            # Save data to .npz file (For SuperGlue compatibility)
             np.savez_compressed(npz_path, 
                             keypoints=keypoints,
                             descriptors=descriptors, 
@@ -252,7 +241,11 @@ class SuperPointExtractionPipeline:
     def __init__(self, config: FeatureExtractionConfig, superpoint_config: SuperPointConfig):
         self.logger = Logger()
         self.config = config
-        self.views = SFMParser(self.logger).parse(config.input_sfm)
+
+        # Retrieves all the images
+        self.views = SFMParser(self.logger).parse(config.input_sfm) 
+        
+        # Intializes the feature extractor and saver classes
         self.extractor = FeatureExtractorFactory.create_extractor(
             config.describer_type, superpoint_config, self.logger)
         self.saver = FeatureSaverFactory.create_saver(
@@ -267,12 +260,15 @@ class SuperPointExtractionPipeline:
         total_features = 0
         start_time = time.time()
         
+        # For each view ID and their respective image paths, it will extract features and save them
         for idx, (image_id, image_path) in enumerate(self.views, 1):
             try:
                 self.logger.progress(idx, total_images, f"Processing {image_id}")
                 
-                # Extract and save features
+                # Extract feature key points, descriptors and confidence scores
                 keypoints, descriptors, scores = self.extractor.extract(image_path)
+
+                # Saves all features to necessary output files
                 self.saver.save(image_id, keypoints, descriptors, scores)
                 total_features += len(keypoints)
                 
@@ -280,7 +276,7 @@ class SuperPointExtractionPipeline:
                 self.logger.log(f"Skipping image {image_id}: {str(e)}", "ERROR")
                 continue
         
-        # Final statistics
+        # Log final statistics
         total_time = time.time() - start_time
         self.logger.log("\n=== Extraction Complete ===", "INFO")
         self.logger.log(f"Total images processed: {idx}/{total_images}", "INFO")
@@ -291,7 +287,7 @@ class SuperPointExtractionPipeline:
 
 # ==================== Main ====================
 def main():
-    # Main entry point for SuperPoint feature extraction
+    # Retrieves input and parameters from the SuperPoint Feature Extractor frontend
     parser = argparse.ArgumentParser(description='SuperPoint feature extraction')
     parser.add_argument('--input', required=True, help='Input SfM file')
     parser.add_argument('--weights', required=True, help='Model weights path')
@@ -302,13 +298,14 @@ def main():
     
     args = parser.parse_args()
     
-    # Create configurations
+    # Create SuperPoint configurations
     superpoint_config = SuperPointConfig(
         weights_path=args.weights,
         max_keypoints=args.maxKeypoints,
         nms_radius=args.nmsRadius
     )
     
+    # Create Pipeline configurations
     extraction_config = FeatureExtractionConfig(
         input_sfm=args.input,
         output_dir=args.output,
