@@ -109,7 +109,7 @@ xcopy /E /I MLPlugin "path\to\Meshroom-2023.3.0\lib\meshroom\nodes\MLPlugin"
 
 ```bash
 copy hybridPhotogrammetry.mg "path\to\Meshroom-2023.3.0\lib\meshroom\pipelines"
-``
+```
 
 * **Compile the Custom Executables Using PyInstaller**
 
