@@ -48,8 +48,8 @@ Ensure that the SuperPoint weights are correctly specified and available before 
         desc.File(
             name="weights",
             label="SuperPoint Weights",
-            description="Path to SuperPoint weights file (.pth).",
-            value=WEIGHTS_PATH,
+            description="Path to SuperPoint weights file (.pth). Leave empty to use default.",
+            value="",  # Default to empty (fallback to WEIGHTS_PATH)
             uid=[1], 
         ),
 
@@ -99,24 +99,31 @@ Ensure that the SuperPoint weights are correctly specified and available before 
 
     def __init__(self):
         super().__init__()
-        # Validate the existence of the SuperPoint weights file when initializing the node
+        # Validate the existence of the default SuperPoint weights file
         if not os.path.exists(self.WEIGHTS_PATH):
-            raise FileNotFoundError(f"SuperPoint weights not found at {self.WEIGHTS_PATH}")
+            raise FileNotFoundError(f"Default SuperPoint weights not found at {self.WEIGHTS_PATH}")
 
-    # Called for processing each chunk (e.g., per-image)
     def processChunk(self, chunk):
-        # Prepare the actual values to substitute in the command line template
+        # Determine the weights path:
+        # If chunk.node.weights.value is empty (""), fall back to the default WEIGHTS_PATH
+        weights_path = chunk.node.weights.value if chunk.node.weights.value else self.WEIGHTS_PATH
+
+        # Verify the weights file exists (either custom or default)
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(f"SuperPoint weights not found at {weights_path}")
+
+        # Prepare the command arguments
         cmd_args = {
             'inputValue': chunk.node.input.value,
-            'weightsValue': chunk.node.weights.value,
+            'weightsValue': weights_path,
             'maxKeypointsValue': chunk.node.maxKeypoints.value,
             'nmsRadiusValue': chunk.node.nmsRadius.value,
             'describerTypesValue': ','.join(chunk.node.describerTypes.value),
             'outputValue': chunk.node.output.value
         }
 
-        # Format the command line string with the actual arguments
+        # Format the command line
         self.commandLine = self.commandLine.format(**cmd_args)
 
-        # Call the parent class's processing method to run the command
+        # Execute the command
         super().processChunk(chunk)
