@@ -52,7 +52,12 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 
 ---
 
-## Installation
+## Automatic Installation 
+
+## Manual Installation
+In the case, that the installation file fails to build the Meshroom plugin or the installation takes too long, you can follow this manual installation guide as an alternative. A YouTube tutorial video for manual installation is also provided below for additional clarity.
+
+[![Watch the video](https://img.youtube.com/vi/3mHiARhuAfI/hqdefault.jpg)](https://www.youtube.com/watch?v=3mHiARhuAfI)
 
 * **Download Meshroom 2023.3.0 (Windows Prebuilt Binary)**
 
