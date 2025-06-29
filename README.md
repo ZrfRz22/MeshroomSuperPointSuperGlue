@@ -48,6 +48,8 @@ This plugin adds a machine learning-based feature matching pipeline to Meshroom 
 
 ## Installation Script
 
+Ensure Git is installed, first.
+
 [➡️ Click here to download the installation script](Install-MeshroomPlugin.ps1)
 
 After downloading, right-click the file and select “Run with PowerShell” (make sure to run it as Administrator).
@@ -64,7 +66,7 @@ If the previously mentioned installation script successfuly installed Meshroom a
 
 A YouTube video tutorial for manual installation is also provided below for additional clarity.
 
-[![Watch the video](https://img.youtube.com/vi/3mHiARhuAfI/hqdefault.jpg)](https://www.youtube.com/watch?v=3mHiARhuAfI)
+[![Watch the video](https://img.youtube.com/vi/r_90XGJAx2E/0.jpg)](https://www.youtube.com/watch?v=r_90XGJAx2E)
 
 **Download Meshroom 2023.3.0 (Windows Prebuilt Binary)**
 
