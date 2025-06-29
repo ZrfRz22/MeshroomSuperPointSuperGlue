@@ -105,6 +105,12 @@ cd path/to/your/MeshroomSuperPointSuperGlue
 xcopy /E /I MLPlugin "path\to\Meshroom-2023.3.0\lib\meshroom\nodes\MLPlugin"
 ```
 
+* **Copy the pre-saved pipeline into Meshroom Pipelines Folder**
+
+```bash
+copy hybridPhotogrammetry.mg "path\to\Meshroom-2023.3.0\lib\meshroom\pipelines"
+``
+
 * **Compile the Custom Executables Using PyInstaller**
 
 ```bash
